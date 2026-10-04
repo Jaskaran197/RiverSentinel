@@ -146,6 +146,23 @@ def build_custom_event(stn: dict, signal: str, value: float, prev6: float, rain2
         confidence=None, decided_by=None, rationale="", evidence="[]", actions=[], state_json=sj, agent_state=sj, case_id=None,
         event_key="custom", primary_action="LOG")
 
+def neighbour_ids(stn: dict, known_ids) -> list:
+    """Same-river (upstream, downstream) then nearby other-river gauges, de-duplicated, limited to stations we know."""
+    ids = _ids(stn.get("upstream_ids")) + _ids(stn.get("downstream_ids")) + [i for i, _ in _nearby(stn.get("nearby_ids"))]
+    known = set(known_ids)
+    return [i for i in dict.fromkeys(ids) if i in known]
+
+def scenario_event(sc: dict, stn: dict, known_ids):
+    """A preset from scenarios.py as a custom event, using each field's default. neighbours_pct (in %) maps onto
+    neighbour_ids() in order; extra percentages or gauges are ignored."""
+    v = lambda k: sc[k][0]
+    nb_pct = {i: p[0] / 100.0 for i, p in zip(neighbour_ids(stn, known_ids), sc["neighbours_pct"])}
+    ev = build_custom_event(stn, "DISCHARGE" if sc["measure"] == "flow" else "LEVEL", float(v("reading_now")), float(v("reading_6h_ago")),
+                            float(v("rain_24h_mm")), float(v("rain_48h_mm")), float(v("rain_gauge_trust")), float(v("minutes_no_data")),
+                            int(v("identical_readings")), bool(sc["single_reading_jump"]), nb_pct, sc["spotted_as"])
+    ev.scenario = sc["name"]
+    return ev
+
 def decide_route(ev, gate):
     """Mirror of the SQL routing with this round's threshold."""
     if gate is None: return "INVESTIGATE"

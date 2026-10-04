@@ -5,7 +5,8 @@ import pytest
 
 import logic
 from logic import (_ids, _nearby, _p99, build_custom_event, decide_route, derive, finalize, fmt, humanize, infer_rule,
-                   neighbour_pcts, nice_name, pct)
+                   neighbour_ids, neighbour_pcts, nice_name, pct, scenario_event)
+from scenarios import SCENARIOS
 
 
 def gate(label, p, p_impossible=0.0):
@@ -199,3 +200,23 @@ def test_humanize():
 
 def test_pct():
     assert (pct(0.876), pct(None), pct(1)) == (88, 0, 100)
+
+
+# ----------------------------------------------------------------------------- scenarios
+def test_neighbour_ids_order_and_filter(station):
+    assert neighbour_ids(station, ["05BH005", "05BM002", "05BJ010"]) == ["05BH005", "05BM002", "05BJ010"]
+    assert neighbour_ids(station, ["05BJ010", "05BH005"]) == ["05BH005", "05BJ010"]          # unknown gauges dropped
+
+
+def test_scenario_event_uses_defaults(station):
+    sc = next(s for s in SCENARIOS if s["gauge"] == "05BH004")
+    ev = scenario_event(sc, station, ["05BH005", "05BM002", "05BJ010"])
+    assert ev.scenario == sc["name"] and ev.signal == "DISCHARGE" and ev.dynamic
+    assert ev.value == sc["reading_now"][0] and ev.rule == "PHYSICAL_BREACH" and ev.breach_side == "LOW"
+    assert json.loads(ev.state_json)["neighbours"]["connected_same_river"]["deltas_pct"] == {"05BH005": 0.01, "05BM002": 0.06}
+
+
+@pytest.mark.parametrize("sc", SCENARIOS, ids=lambda s: s["name"])
+def test_every_scenario_builds(station, sc):
+    ev = scenario_event(sc, station | {"station_id": sc["gauge"]}, ["05BH005", "05BM002", "05BJ010"])
+    assert ev.station_id == sc["gauge"] and ev.rule in ("GAP", "PHYSICAL_BREACH", "SPIKE", "FLATLINE", "RAPID_RISE", "STEP")

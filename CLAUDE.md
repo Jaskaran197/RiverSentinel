@@ -21,7 +21,7 @@ These dial real numbers and cost money. Always ask the user first:
 - `test_twilio.py --call ...`
 - Letting the app's call countdown complete (if driving the UI)
 
-"Place real phone calls" defaults **on** when voice env vars are set. When driving the UI (browser or AppTest), turn it off first (`session_state["real_calls"] = False`).
+The Dev Panel's "Place Call" toggle (`session_state["real_calls"]`) defaults off; keep it off when driving the UI (browser or AppTest). Running a scenario or a replay that reaches a PAGE decision starts a countdown — with Place Call on, it dials.
 
 ## Layout & gotchas
 
@@ -32,7 +32,7 @@ These dial real numbers and cost money. Always ask the user first:
 - "Live mode" re-runs the AI on stored inputs and silently falls back to stored results on failure (shown as a caption), so a working UI doesn't prove live calls work.
 - Queries are cached `st.cache_data(ttl=900)`; the first query after idle pays the warehouse wake-up time.
 - Playback uses `time.sleep` + `st.rerun()` loops (`SETTLE_S`, `REVEAL_S`) — keep that pacing in mind before adding blocking work.
-- Timestamps are displayed in a hardcoded `MDT` (UTC-6).
+- Everything displayed is in a hardcoded `MDT` (UTC-6); data and `session_state.t` stay UTC-aware. Plotly has no time zones and can't parse offsets in shapes (draws `NaN`), so pass chart x-values through `mdt()` (naive MDT wall time). Give date axes an explicit `type="date"` + range — an empty trace otherwise breaks `add_vline`.
 - `page.py` is stdlib-only (keep it that way); `timeline.py` imports it as `pager`, looking in `.` then `../scripts`.
 - `load_env()` is duplicated in all four files: it reads `.env` from the script dir, its parent, grandparent, or cwd, and never overrides existing env vars.
 
@@ -41,7 +41,9 @@ These dial real numbers and cost money. Always ask the user first:
 - Most of the UI is hand-written HTML via `st.markdown(..., unsafe_allow_html=True)`, styled by the single `<style>` block near the top. Add classes there; reuse the palette constants (`SURFACE`, `INK`, `VERDICT_COLOR`, …) rather than new hex values. Streamlit buttons can't live inside that HTML.
 - The decision card's staged reveal is CSS `animation-delay`s in the `.play` rules; `REVEAL_S` (≈ last delay + duration) holds off reruns so they don't cut it short — update both together.
 - User-facing text is plain language via the `*_WORD` / `ACTION_*` maps; never show raw enum or column names.
-- Streamlit 1.65 deprecates `use_container_width`; use `width="stretch"` in new or edited code.
+- Streamlit 1.65 deprecates `use_container_width`; use `width="stretch"`.
+- Dev Panel (sidebar): System/Station filter → `lanes`/`ev_lanes`, which every dashboard section uses; playback; scenarios (`scenarios.py` presets → `logic.scenario_event`, shown in place of the decision card). All playhead moves go through `seek()` (handles `nav()`, re-arming calls when moving back, leaving a scenario). Panel widgets are keyed (`speed_min`, `countdown_s`, `real_calls`, `live_mode`, `system`, `stations_<system>`) — read them from `session_state`, don't pass `value=` too.
+- `seekbar.py` is an `st.components.v2` component (inline HTML/CSS/JS). Its JS is re-invoked on every data change, so DOM/state persist on `parentElement`; the seek trigger is handled in the on-change callback, which runs *before* the script, so the page renders at the new time. AppTest can't drive it — verify in a browser.
 
 ## Env
 

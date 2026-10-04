@@ -1,5 +1,5 @@
 """Headless render of timeline.py via Streamlit AppTest: real (read-only) Databricks data, real calls and live AI forced off.
-Usage: python .claude/skills/smoke/app_check.py [N]   # click "Next event" N times (default 3)"""
+Usage: python .claude/skills/smoke/app_check.py [N]   # click ⏩ (next record) N times (default 3)"""
 import sys
 from pathlib import Path
 
@@ -13,7 +13,7 @@ at.run()
 ok = not at.exception
 print("idle render:", "ok" if ok else [e.value for e in at.exception])
 for i in range(steps):
-    next(b for b in at.button if b.label == "Next event").click().run()
+    next(b for b in at.button if b.label == "⏩").click().run()
     assert not at.session_state["real_calls"]
     errs = [e.value for e in at.exception]
     ok &= not errs
