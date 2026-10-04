@@ -1,0 +1,6 @@
+streamlit>=1.40
+pydeck>=0.9
+databricks-sql-connector>=3.4
+databricks-sdk>=0.40
+pandas>=2.0
+plotly>=5.20
