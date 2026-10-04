@@ -46,7 +46,7 @@ CATALOG = os.environ.get("CATALOG", "river")
 from logic import (MDT, derive, has, fmt, _safe_json, _ids, _nearby, neighbour_pcts, AUTO_RESOLVE_THRESHOLD, NEIGHBOUR_MOVE_PCT,
                    decide_route, finalize, pct, nice_name, humanize, scenario_event)
 from scenarios import SCENARIOS
-from seekbar import seek_bar
+from player import player
 
 def mdt(x):
     """UTC time(s) → naive MDT wall-clock time for charts (Plotly has no time zones and can't parse offsets in shapes)."""
@@ -145,10 +145,58 @@ st.markdown("""<style>
 .pop{animation:appear .35s ease-out}
 .livenote{margin-top:8px;font-size:.76rem;color:#898781}
 
-/* ---- dev panel (sidebar) ---- */
-.devtitle{font-size:1.15rem;font-weight:650;color:#0b0b0b;margin:-6px 0 2px 0}
-.devsec{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:#898781;border-top:1px solid #e1e0d9;padding-top:12px;margin:10px 0 2px 0}
-.devlab{font-size:.9rem;color:#0b0b0b}
+/* ---- dev panel (sidebar): a utilitarian overlay, deliberately unlike the dashboard — "stats for nerds" ---- */
+section[data-testid="stSidebar"]{--dv-bg:rgba(16,17,19,.94);--dv-fg:#d8d8d4;--dv-mute:#8b8b86;--dv-line:#3a3b3e;--dv-acc:#7ee0b5;
+  --dv-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;background:var(--dv-bg);border-right:1px solid var(--dv-line)}
+section[data-testid="stSidebar"] > div{background:transparent}
+section[data-testid="stSidebar"] *{font-family:var(--dv-mono) !important}
+section[data-testid="stSidebar"] [data-testid="stIconMaterial"], section[data-testid="stSidebar"] [data-testid="stIconMaterial"] *{font-family:"Material Symbols Rounded" !important}
+section[data-testid="stSidebar"], section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] span{color:var(--dv-fg);font-size:.8rem}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"], section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{color:var(--dv-mute);font-size:.72rem;line-height:1.45}
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{color:var(--dv-mute);font-size:.72rem}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.55rem}
+/* inputs (selectbox / multiselect render a [role=group] box): flat, square, outlined */
+section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]){background:transparent !important;border:1px solid var(--dv-line) !important;border-radius:2px !important;min-height:32px}
+section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]):hover, section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]):focus-within{border-color:var(--dv-acc) !important}
+section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]) input{color:var(--dv-fg) !important;font-size:.8rem !important}
+section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]) input::placeholder{color:var(--dv-mute) !important}
+section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]) > button, section[data-testid="stSidebar"] [role="group"]:has(input[role="combobox"]) > button svg{color:var(--dv-mute) !important}
+section[data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span{background:transparent !important;border:1px solid var(--dv-acc);border-radius:2px !important;color:var(--dv-acc) !important;font-size:.72rem}
+section[data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] [role="group"] *{color:var(--dv-acc) !important}
+/* dropdown menus are portalled to <body>: style them only while a sidebar combobox is open */
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]){background:#16171a !important;border:1px solid var(--dv-line, #3a3b3e);border-radius:2px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]) *{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace !important;font-size:.78rem;color:#d8d8d4}
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]) [role="option"]:hover,
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]) [role="option"][data-focused="true"],
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]) [role="option"][data-hovered="true"]{background:rgba(126,224,181,.12) !important}
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]) [role="option"][aria-selected="true"]{color:#7ee0b5}
+body:has(section[data-testid="stSidebar"] [role="combobox"][aria-expanded="true"]) :is([data-testid="stSelectboxVirtualDropdown"],[data-testid="stMultiSelectDropdown"]) [role="option"][aria-selected="true"] *{color:#7ee0b5}
+/* toggles (label > hidden input, track div > knob div): square, accent when on */
+section[data-testid="stSidebar"] [data-testid="stCheckbox"] label > span + div{background:var(--dv-line) !important;border-radius:2px !important}
+section[data-testid="stSidebar"] [data-testid="stCheckbox"] label > span + div > div{background:var(--dv-mute) !important;border-radius:1px !important;box-shadow:none !important}
+section[data-testid="stSidebar"] [data-testid="stCheckbox"] label:has(input:checked) > span + div{background:rgba(126,224,181,.35) !important}
+section[data-testid="stSidebar"] [data-testid="stCheckbox"] label:has(input:checked) > span + div > div{background:var(--dv-acc) !important}
+section[data-testid="stSidebar"] [data-testid="stCheckbox"] label:has(input:disabled){opacity:.45}
+/* buttons: bracketed text, no fill */
+section[data-testid="stSidebar"] .stButton button{background:transparent;border:1px solid var(--dv-acc);border-radius:2px;min-height:32px;color:var(--dv-acc)}
+section[data-testid="stSidebar"] .stButton button p{color:var(--dv-acc);font-size:.78rem;text-transform:lowercase}
+section[data-testid="stSidebar"] .stButton button p::before{content:"[ "} section[data-testid="stSidebar"] .stButton button p::after{content:" ]"}
+section[data-testid="stSidebar"] .stButton button:hover{background:rgba(126,224,181,.1)}
+/* expander */
+section[data-testid="stSidebar"] [data-testid="stExpander"] details{border:1px dashed var(--dv-line);border-radius:2px;background:transparent}
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover, section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover p{color:var(--dv-acc)}
+/* collapse chevron */
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button{color:var(--dv-mute)}
+.devtitle{font-size:.82rem !important;color:var(--dv-acc);letter-spacing:.04em;margin:-8px 0 0 0}
+.devtitle::before{content:"▍"}
+.devsec{font-size:.7rem !important;letter-spacing:.08em;text-transform:uppercase;color:var(--dv-mute);display:flex;align-items:center;gap:8px;margin:12px 0 0 0}
+.devsec::before{content:"//";color:var(--dv-acc)}
+.devsec::after{content:"";flex:1;border-top:1px dashed var(--dv-line)}
+.devlab{font-size:.8rem !important;color:var(--dv-fg)}
+section[data-testid="stSidebar"] .stBidiComponent{margin-top:6px}
+.devstats{border-top:1px dashed var(--dv-line);margin-top:10px;padding-top:8px;font-size:.7rem !important;color:var(--dv-fg);line-height:1.6}
+.devstats div{font-size:.7rem !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.devstats span{display:inline-block;width:64px;color:var(--dv-mute);font-size:.7rem !important}
 </style>""", unsafe_allow_html=True)
 
 
@@ -581,7 +629,7 @@ ss.setdefault("paged", set()); ss.setdefault("pending_call", None); ss.setdefaul
 voice_ready = pager is not None and all(os.environ.get(k) for k in ("ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "CONTACT_1"))
 ss.setdefault("real_calls", False)                 # real calls are opt-in, every session
 if not voice_ready: ss.real_calls = False
-ss.setdefault("live_mode", True); ss.setdefault("live_results", {})
+ss.setdefault("live_mode", False); ss.setdefault("live_results", {})
 ss.setdefault("nav_at", 0.0)
 ss.setdefault("scenario_ev", None); ss.setdefault("scenario_fresh", False)
 SETTLE_S = 1.5   # the playhead must rest this long before live calls or a countdown start (lets you skip past events quickly)
@@ -628,22 +676,26 @@ with st.sidebar:
 
     # 1B. record playback
     st.markdown('<div class="devsec">Record Playback</div>', unsafe_allow_html=True)
-    b1, b2, b3 = st.columns(3)
-    if b1.button("⏪", width="stretch", help="Previous record"):
-        cur = ev_lanes.loc[ev_lanes.visible_at <= ss.t, "visible_at"]
-        prev = ev_lanes.loc[ev_lanes.visible_at < cur.max(), "visible_at"] if len(cur) else cur
-        seek(prev.max().to_pydatetime() + timedelta(minutes=1) if len(prev) else T_MIN)
-    if b2.button("⏸️" if ss.playing else "▶️", width="stretch", type="primary", help="Pause" if ss.playing else "Play"):
-        playing = not ss.playing
-        if playing and ss.t >= T_MAX: seek(T_MIN)
-        ss.playing, ss.scenario_ev = playing, None
-        st.rerun()                                      # repaint the button with its new icon
-    if b3.button("⏩", width="stretch", help="Next record"):
-        nxt = ev_lanes.loc[ev_lanes.visible_at > ss.t, "visible_at"]
-        seek(nxt.min().to_pydatetime() + timedelta(minutes=1) if len(nxt) else T_MAX)
+    def transport(action):
+        """Player buttons (runs as a callback, before the script): previous / next record in the selection, play-pause."""
+        if action == "prev":
+            cur = ev_lanes.loc[ev_lanes.visible_at <= ss.t, "visible_at"]
+            prev = ev_lanes.loc[ev_lanes.visible_at < cur.max(), "visible_at"] if len(cur) else cur
+            seek(prev.max().to_pydatetime() + timedelta(minutes=1) if len(prev) else T_MIN)
+        elif action == "next":
+            nxt = ev_lanes.loc[ev_lanes.visible_at > ss.t, "visible_at"]
+            seek(nxt.min().to_pydatetime() + timedelta(minutes=1) if len(nxt) else T_MAX)
+        elif action == "toggle":
+            playing = not ss.playing
+            if playing and ss.t >= T_MAX: seek(T_MIN)
+            ss.playing, ss.scenario_ev = playing, None
     cur_rec = ev_lanes.loc[ev_lanes.visible_at <= ss.t, "visible_at"]
-    seek_bar(T_MIN, T_MAX, ss.t, ev_lanes.visible_at, cur_rec.max() if len(cur_rec) else None, key="seekbar", on_seek=seek)
+    player(T_MIN, T_MAX, ss.t, ev_lanes.visible_at, cur_rec.max() if len(cur_rec) else None, ss.playing,
+           key="player", on_seek=seek, on_action=transport)
     inline("Speed").selectbox("Speed", list(SPEED_LABEL), format_func=SPEED_LABEL.get, key="speed_min", label_visibility="collapsed")
+    inline("Live Model").toggle("Live Model", key="live_mode", label_visibility="collapsed",
+                                help=f"Re-run ai_decide and ai_query ({LLM_MODEL}) on the warehouse for each new decision, with real timings. "
+                                     "Off = replay the stored results. Scenarios always run live.")
     inline("Place Call").toggle("Place Call", key="real_calls", disabled=not voice_ready, label_visibility="collapsed",
                                 help=None if voice_ready else "Needs page.py plus ElevenLabs, Twilio and CONTACT_1 settings")
     inline("Call Delay").selectbox("Call Delay", DELAY_S, format_func=lambda s_: f"{s_} s", key="countdown_s", label_visibility="collapsed")
@@ -665,12 +717,18 @@ with st.sidebar:
             st.error(f"Gauge {sc['gauge']} is not in {CATALOG}.silver.station_context.")
 
     with st.expander("More options"):
-        st.toggle("Re-run the AI live on each new decision", key="live_mode",
-                  help="Calls ai_decide and ai_query on the Databricks warehouse with the exact stored input and shows the real timings. Off = replay the stored results.")
-        st.caption(f"Model for the closer look: {LLM_MODEL}")
         escalate = st.toggle("If no answer, call the second contact", value=bool(os.environ.get("CONTACT_2")), disabled=not os.environ.get("CONTACT_2"))
         if voice_ready:
             st.caption("Will call " + pager.mask(os.environ["CONTACT_1"]) + (f", then {pager.mask(os.environ['CONTACT_2'])}" if escalate and os.environ.get("CONTACT_2") else ""))
+
+    # readout: the panel's "stats for nerds"
+    last = ev_lanes[ev_lanes.visible_at <= ss.t].tail(1)
+    rows = [("t", pd.Timestamp(ss.t).tz_convert(MDT).strftime("%Y-%m-%d %H:%M MDT")),
+            ("records", f"{len(ev_lanes)} · {int((ev_lanes.visible_at <= ss.t).sum())} seen"),
+            ("current", f"{last.station_id.iloc[0]} · {last.candidate_id.iloc[0]}" if len(last) else "–"),
+            ("state", ("playing" if ss.playing else "paused") + (" · scenario" if ss.scenario_ev is not None else "")
+                      + (" · call pending" if ss.pending_call else "") + (" · live" if ss.live_mode else " · stored"))]
+    st.markdown('<div class="devstats">' + "".join(f'<div><span>{k}</span>{v}</div>' for k, v in rows) + '</div>', unsafe_allow_html=True)
 
 T = ss.t
 known = ev_lanes[ev_lanes["visible_at"] <= T]
@@ -723,7 +781,7 @@ elif len(seen):
 else:
     # nothing seen yet: quiet sentry state
     st.markdown(f'<div class="idle"><div class="dot"></div><div><b>Watching {len(lanes)} gauge{"s" if len(lanes) != 1 else ""}</b> in '
-                f'{SYSTEM_LABEL.get(system, system)}. Nothing unusual so far. Press <b>⏩</b> to move to the first odd reading.</div></div>', unsafe_allow_html=True)
+                f'{SYSTEM_LABEL.get(system, system)}. Nothing unusual so far. Press <b>next ▸▸</b> in the Dev Panel to move to the first odd reading.</div></div>', unsafe_allow_html=True)
     station_map(lanes, None, height=320)
 
 # ----------------------------------------------------------------------------- timeline

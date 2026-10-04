@@ -7,7 +7,7 @@ Run these steps from the repo root and report pass/fail for each with a one-line
 
 1. **Lint + unit tests (offline):** `ruff check . && pytest -q`
 2. **Databricks:** `python test_databricks.py --no-ai`. If the user asked to verify AI/verdict changes, run it without `--no-ai` too (slower; the first query may wait for the warehouse to wake up).
-3. **App renders:** `python .claude/skills/smoke/app_check.py [N]` — runs `timeline.py` headlessly via Streamlit `AppTest` against real data (read-only) with `real_calls` and `live_mode` forced off, clicks ⏩ (next record) N times (default 3), and fails on any exception. Takes ~20-40 s. For UI changes that only appear later in the month or in a specific state, increase N or adapt the script's session_state setup.
+3. **App renders:** `python .claude/skills/smoke/app_check.py [N]` — runs `timeline.py` headlessly via Streamlit `AppTest` against real data (read-only) with `real_calls` and `live_mode` forced off, renders at N points across the month (default 3; AppTest cannot click the custom player, so it sets `session_state.t`), and fails on any exception. Takes ~20-40 s. For UI changes that only appear later in the month or in a specific state, increase N or adapt the script's session_state setup.
 4. **Voice config (optional, no call):** if the change touched `page.py` or voice code, run `python test_twilio.py` (credential check only).
 
 Caveats to state in the report:
