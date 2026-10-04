@@ -4,7 +4,8 @@ Main-dashboard system map: a fixed-view MapLibre map (loaded from a CDN) built w
 - Basemap: our own monochrome style over OpenFreeMap vector tiles (OpenMapTiles schema) with waterways emphasised,
   major roads and place names for orientation, and hillshade from the AWS Terrain Tiles (Terrarium DEM).
 - Stations: dark-grey dots (in the Dev Panel selection), light-grey dots (rest of the system). The current station is a
-  crimson pulsing marker with a label: station id, name, and a sparkline of recent flow.
+  crimson pulsing marker; its panel (station id, name, sparkline of recent flow) is bolted onto the map's right edge in a
+  reserved gutter, centred on the station's height, with a dashed leader from the station to the panel's notch.
 - The view fits the system's stations once and never recentres when the current station changes; it refits only when
   the system changes. Pan/zoom are disabled.
 
@@ -76,9 +77,12 @@ STYLE = {
     ],
 }
 
+GUTTER = 240          # px reserved right of the map for the bolted-on station panel (always reserved, so the map never resizes)
+
 _CSS = """
 :host{display:block}
-.rsmap{position:relative;width:100%;border:1px solid #d9d9d5;border-radius:6px;overflow:hidden;background:#efefed}
+.wrap{position:relative}
+.rsmap{position:relative;border:1px solid #d9d9d5;border-radius:6px 0 0 6px;overflow:hidden;background:#efefed}
 .canvas{position:absolute;inset:0}
 .msg{position:absolute;inset:0;display:grid;place-items:center;color:#8b8b86;font:13px system-ui,sans-serif}
 .cur{position:relative;width:14px;height:14px}
@@ -86,14 +90,17 @@ _CSS = """
 .cur .ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cur);animation:pulse 1.8s ease-out infinite}
 .cur .ring.r2{animation-delay:.9s}
 @keyframes pulse{from{transform:scale(1);opacity:.9} to{transform:scale(3.6);opacity:0}}
-.lab{position:absolute;left:20px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.94);border:1px solid #d0d0cc;
-     border-left:3px solid var(--cur);border-radius:3px;padding:5px 8px 6px;white-space:nowrap;font:12px/1.35 system-ui,sans-serif;
-     color:#1d1d1b;box-shadow:0 2px 8px rgba(0,0,0,.12);pointer-events:none}
-.cur.flip .lab{left:auto;right:20px;border-left:1px solid #d0d0cc;border-right:3px solid var(--cur)}
-.lab .id{font-weight:700;letter-spacing:.03em}
-.lab .nm{color:#4a4a47}
-.lab svg{display:block;margin-top:4px}
-.lab .val{font-size:11px;color:#4a4a47;margin-top:1px}
+/* leader: a dashed rail from the station to the map's right edge, at the station's height */
+.leader{position:absolute;height:0;border-top:1px dashed var(--cur);opacity:.7;pointer-events:none;display:none;z-index:2;transition:top .35s ease}
+/* panel: bolted onto the map's right edge, vertically centred on the station (clamped to the map), notch at the station's height */
+.panel{position:absolute;left:0;top:0;display:none;background:#fff;border:1px solid #d0d0cc;border-left:3px solid var(--cur);
+       border-radius:0 4px 4px 0;padding:6px 10px 7px;white-space:nowrap;font:12px/1.35 system-ui,sans-serif;color:#1d1d1b;
+       box-shadow:2px 2px 8px rgba(0,0,0,.08);transition:top .35s ease;max-width:calc(var(--gutter) - 4px);overflow:hidden;text-overflow:ellipsis}
+.panel::before{content:"";position:absolute;left:-9px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--cur);transition:top .35s ease}
+.panel .id{font-weight:700;letter-spacing:.03em}
+.panel .nm{color:#4a4a47;overflow:hidden;text-overflow:ellipsis}
+.panel svg{display:block;margin-top:4px}
+.panel .val{font-size:11px;color:#4a4a47;margin-top:1px}
 .maplibregl-ctrl-attrib{font-size:10px}
 """
 
@@ -120,54 +127,68 @@ function fc(stations) {
   return { type: "FeatureCollection", features: stations.map((p) => ({ type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] },
            properties: { id: p.id, on: p.on ? 1 : 0 } })) };
 }
+function place(s) {                                    // panel + leader follow the station's screen position
+  const { map, data } = s, c = data.current, panel = s.panel, leader = s.leader;
+  if (!c) { panel.style.display = leader.style.display = "none"; return; }
+  const W = s.mapEl.clientWidth, H = s.mapEl.clientHeight, p = map.project([c.lon, c.lat]);
+  panel.style.display = leader.style.display = "block";
+  const h = panel.offsetHeight, top = Math.min(Math.max(p.y - h / 2, 0), H - h);
+  panel.style.left = (W + 1) + "px";                   // flush against the map's right border
+  panel.style.top = top + "px";
+  panel.style.setProperty("--notch", Math.min(Math.max(p.y - top, 8), h - 8) + "px");
+  leader.style.left = (p.x + 12) + "px"; leader.style.width = Math.max(0, W - p.x - 12) + "px"; leader.style.top = p.y + "px";
+}
 function apply(s) {
   const { map, data, lib } = s;
   if (s.system !== data.system) { map.fitBounds(data.bounds, { padding: PAD, duration: 0 }); s.system = data.system; }   // the only recentre
   map.getSource("stations").setData(fc(data.stations));
   const c = data.current;
-  if (!c) { if (s.marker) { s.marker.remove(); s.marker = null; } return; }
+  s.wrap.style.setProperty("--cur", data.colors.current);
+  if (!c) { if (s.marker) { s.marker.remove(); s.marker = null; } place(s); return; }
   if (!s.marker) {
     const el = document.createElement("div"); el.className = "cur";
-    el.innerHTML = '<div class="ring"></div><div class="ring r2"></div><div class="dot"></div><div class="lab"></div>';
+    el.innerHTML = '<div class="ring"></div><div class="ring r2"></div><div class="dot"></div>';
     s.marker = new lib.Marker({ element: el, anchor: "center" });
   }
-  const el = s.marker.getElement();
-  el.style.setProperty("--cur", data.colors.current);
   s.marker.setLngLat([c.lon, c.lat]).addTo(map);
-  el.classList.toggle("flip", map.project([c.lon, c.lat]).x > map.getContainer().clientWidth * 0.62);   // keep the label inside the map
-  el.querySelector(".lab").innerHTML = `<div class="id">${esc(c.id)}</div><div class="nm">${esc(c.name)}</div>` +
+  s.panel.innerHTML = `<div class="id">${esc(c.id)}</div><div class="nm" title="${esc(c.name)}">${esc(c.name)}</div>` +
     spark(c.spark, data.colors.current) + (c.spark_label ? `<div class="val">${esc(c.spark_label)}</div>` : "");
+  place(s);
 }
 export default function (component) {
   const { data, parentElement } = component;
-  const root = parentElement.querySelector(".rsmap");
-  root.style.height = data.height + "px";
+  const wrap = parentElement.querySelector(".wrap"), mapEl = wrap.querySelector(".rsmap");
+  mapEl.style.height = data.height + "px";
+  mapEl.style.width = `calc(100%% - ${data.gutter}px)`;
+  wrap.style.setProperty("--gutter", data.gutter + "px");
   let s = parentElement.__rsmap;
   if (!s) {
-    s = parentElement.__rsmap = { ready: false, system: null };
+    s = parentElement.__rsmap = { ready: false, system: null, wrap, mapEl, panel: wrap.querySelector(".panel"), leader: wrap.querySelector(".leader") };
     loadLib().then((lib) => {
       s.lib = lib;
-      const map = new lib.Map({ container: root.querySelector(".canvas"), style: STYLE, bounds: s.data.bounds,
+      const map = new lib.Map({ container: mapEl.querySelector(".canvas"), style: STYLE, bounds: s.data.bounds,
                                 fitBoundsOptions: { padding: PAD }, interactive: false, attributionControl: { compact: true } });
       s.map = map; s.system = s.data.system;
+      map.on("resize", () => s.ready && place(s));
       map.on("load", () => {
         map.addSource("stations", { type: "geojson", data: fc([]) });
         map.addLayer({ id: "stations", type: "circle", source: "stations", paint: {
           "circle-radius": ["case", ["==", ["get", "on"], 1], 5, 4],
           "circle-color": ["case", ["==", ["get", "on"], 1], s.data.colors.station, s.data.colors.station_off],
           "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5 } });
-        root.querySelector(".msg").remove();
-        root.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");   // start collapsed (the "i" opens it)
+        mapEl.querySelector(".msg").remove();
+        mapEl.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");   // start collapsed (the "i" opens it)
         s.ready = true; apply(s);
       });
-    }).catch(() => { root.querySelector(".msg").textContent = "Map library failed to load (offline?)"; });
+    }).catch(() => { mapEl.querySelector(".msg").textContent = "Map library failed to load (offline?)"; });
   }
   s.data = data;
   if (s.ready) apply(s);
 }
 """ % (json.dumps(MAPLIBRE_JS), json.dumps(STYLE))
 
-_HTML = f'<link rel="stylesheet" href="{MAPLIBRE_CSS}"><div class="rsmap"><div class="canvas"></div><div class="msg">Loading map…</div></div>'
+_HTML = (f'<link rel="stylesheet" href="{MAPLIBRE_CSS}"><div class="wrap"><div class="rsmap"><div class="canvas"></div>'
+         '<div class="msg">Loading map…</div><div class="leader"></div></div><div class="panel"></div></div>')
 
 _component = st.components.v2.component("rs_station_map", html=_HTML, css=_CSS, js=_JS)
 
@@ -179,4 +200,4 @@ def system_map(system: str, stations, current: dict | None, *, key: str, height:
     lons, lats = [p["lon"] for p in stations], [p["lat"] for p in stations]
     bounds = [[min(lons), min(lats)], [max(lons), max(lats)]] if stations else [[-180, -60], [180, 75]]
     return _component(key=key, data={"system": system, "bounds": bounds, "stations": stations, "current": current,
-                                     "height": height, "colors": {k: C[k] for k in ("station", "station_off", "current")}})
+                                     "height": height, "gutter": GUTTER, "colors": {k: C[k] for k in ("station", "station_off", "current")}})

@@ -794,7 +794,7 @@ if cur_id is not None:
 
 st.markdown(f'<div class="dash-head"><div class="dash-title">{system}<span class="chev">›</span>{SYSTEM_NAME.get(system, system)} River System</div>'
             f'<div class="dash-brand"><div class="logo">River Sentinel</div><div class="clock">{fmt(T)} MDT</div></div></div>', unsafe_allow_html=True)
-map_col, _ = st.columns([1.35, 1])
+map_col, _ = st.columns([4, 1])                     # the map component = map (~same width as before) + a 240 px gutter for its station panel
 with map_col:
     in_sel = set(lanes.station_id)
     system_map(system, [{"id": r.station_id, "name": nice_name(r.name), "lat": float(r.lat), "lon": float(r.lon), "on": r.station_id in in_sel}
