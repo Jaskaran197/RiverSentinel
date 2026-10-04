@@ -187,12 +187,15 @@ section[data-testid="stSidebar"] [data-testid="stExpander"] details{border:1px d
 section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover, section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover p{color:var(--dv-acc)}
 /* collapse chevron */
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button{color:var(--dv-mute)}
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{height:40px;margin-bottom:0}   /* half the default space above the title */
 .devtitle{font-size:.82rem !important;color:var(--dv-acc);letter-spacing:.04em;margin:-8px 0 0 0}
 .devtitle::before{content:"▍"}
 .devsec{font-size:.7rem !important;letter-spacing:.08em;text-transform:uppercase;color:var(--dv-mute);display:flex;align-items:center;gap:8px;margin:12px 0 0 0}
 .devsec::before{content:"//";color:var(--dv-acc)}
 .devsec::after{content:"";flex:1;border-top:1px dashed var(--dv-line)}
 .devlab{font-size:.8rem !important;color:var(--dv-fg)}
+/* Streamlit pulls the next element up under markdown (margin-bottom:-1rem): undo it for the panel's own blocks so headings don't crowd and labels centre */
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]:has(> .devlab, > .devsec, > .devtitle, > .devstats){margin-bottom:0}
 section[data-testid="stSidebar"] .stBidiComponent{margin-top:6px}
 .devstats{border-top:1px dashed var(--dv-line);margin-top:10px;padding-top:8px;font-size:.7rem !important;color:var(--dv-fg);line-height:1.6}
 .devstats div{font-size:.7rem !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -666,11 +669,11 @@ with st.sidebar:
     # 1A. system / station
     st.markdown('<div class="devsec">System / Station</div>', unsafe_allow_html=True)
     systems = sorted(stations.province.unique(), key=lambda p: SYSTEM_LABEL.get(p, p))
-    system = st.selectbox("System", systems, format_func=lambda p: SYSTEM_LABEL.get(p, p), key="system", on_change=nav)
+    system = st.selectbox("System", systems, format_func=lambda p: SYSTEM_LABEL.get(p, p), key="system", on_change=nav, label_visibility="collapsed")
     in_system = stations[stations.province == system]
     station_label = {r.station_id: f"{nice_name(r.name)} ({r.station_id})" for r in in_system.itertuples()}
     picked = st.multiselect("Station", sorted(station_label, key=station_label.get), format_func=station_label.get,
-                            key=f"stations_{system}", placeholder="All stations", on_change=nav)
+                            key=f"stations_{system}", placeholder="All stations", on_change=nav, label_visibility="collapsed")
     lanes = in_system[in_system.station_id.isin(picked)] if picked else in_system
     ev_lanes = events[events.station_id.isin(lanes.station_id)]
 
@@ -706,7 +709,7 @@ with st.sidebar:
     # 1C. scenarios
     st.markdown('<div class="devsec">Scenarios</div>', unsafe_allow_html=True)
     names = [s_["name"] for s_ in SCENARIO_LIST]
-    sc = SCENARIO_LIST[names.index(st.selectbox("Scenario", names, key="scenario_pick"))]
+    sc = SCENARIO_LIST[names.index(st.selectbox("Scenario", names, key="scenario_pick", label_visibility="collapsed"))]
     st.caption(f"Expected: {sc['expect']} · {'illustrative numbers' if sc['source'] == 'illustrative' else 'numbers from the September data'}")
     if st.button("Run scenario", type="primary", width="stretch"):
         if sc["gauge"] in set(stations.station_id):
