@@ -57,8 +57,9 @@ RULE_WORD = {"PHYSICAL_BREACH": "a reading outside what is physically possible",
              "RAPID_RISE": "a fast rise"}
 
 # palette — "Inverted Panel": the Dev Panel's look with its colours flipped (charcoal on light grey, mint deepened to read on light).
-# Mint = interactive / in progress; crimson = the selected station and calls. Mirrored as CSS variables below.
-FG, MUTED, ACCENT, ALERT, BLUE, AMBER = "#16171A", "#74746F", "#0B8A5E", "#D7263D", "#1F6FD1", "#B86E00"
+# Highlighter yellow (a fill behind ink, never yellow text) = interactive / in progress; crimson = the selected station and calls;
+# green belongs to the Dev Panel only. Mirrored as CSS variables below.
+FG, MUTED, HIGHLIGHT, ALERT, BLUE, AMBER = "#16171A", "#74746F", "#FFD43B", "#D7263D", "#1F6FD1", "#B86E00"
 VERDICT_COLOR = {"SENSOR_FAULT": AMBER, "NATURAL_EVENT": BLUE, "OPERATIONAL_CHANGE": "#5B5F66",
                  "INCONCLUSIVE": "#8A4FD0", "PENDING": "#9A9A94"}
 
@@ -74,13 +75,14 @@ st.markdown("""<style>
    1px rules, // labels with dashed rules, [ bracketed ] buttons. Mint (deepened to read on light) = interactive / in progress;
    crimson = the selected station and calls. No web fonts: the same system mono as the Dev Panel. */
 :root{--bg:#EDEDEA;--panel:#F7F7F5;--fg:#16171A;--mute:#74746F;--faint:#A3A39D;--line:#C6C6C1;--line2:#DCDCD7;
-      --acc:#0B8A5E;--acc-soft:rgba(11,138,94,.10);--alert:#D7263D;--blue:#1F6FD1;--amber:#B86E00;
+      --hl:#FFD43B;--hl-soft:rgba(255,212,59,.35);--alert:#D7263D;--blue:#1F6FD1;--amber:#B86E00;
       --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-      --signal:var(--alert);--rule:var(--line2)}   /* aliases the markup uses (countdown ring) */
+      --signal:var(--alert);--rule:var(--line2);   /* aliases the markup uses (countdown ring) */
+      --cardh:310px;--tile-h:66px;--act-lift:141px}   /* stop cards have a fixed height so the Act card's buttons can sit right under its call tile */
 [data-testid="stApp"]{background:var(--bg)}
 [data-testid="stMain"]{color:var(--fg);background:var(--bg)}
 .dash-head, .stats, .pf, .sec-head, .idle, .mi, .mi *{font-family:var(--mono)}
-@keyframes pulse {0%{box-shadow:0 0 0 0 rgba(11,138,94,.45)} 70%{box-shadow:0 0 0 10px rgba(11,138,94,0)} 100%{box-shadow:0 0 0 0 rgba(11,138,94,0)}}
+@keyframes pulse {0%{box-shadow:0 0 0 0 rgba(255,196,0,.6)} 70%{box-shadow:0 0 0 10px rgba(255,196,0,0)} 100%{box-shadow:0 0 0 0 rgba(255,196,0,0)}}
 @keyframes appear {from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none}}
 @keyframes grow {from{transform:scaleX(0)} to{transform:scaleX(1)}}
 @keyframes fadeout {to{opacity:0;visibility:hidden}}
@@ -89,7 +91,7 @@ st.markdown("""<style>
 @keyframes live {50%{opacity:.2}}
 .idle{display:flex;align-items:center;gap:14px;border:1px dashed var(--line);border-radius:2px;padding:16px 18px;color:var(--mute);background:var(--panel);margin-top:6px;font-size:.8rem}
 .idle b{color:var(--fg)}
-.dot{width:9px;height:9px;border-radius:1px;background:var(--acc);animation:pulse 1.8s infinite;flex:none}
+.dot{width:9px;height:9px;border-radius:1px;background:var(--hl);box-shadow:inset 0 0 0 1px var(--fg);animation:pulse 1.8s infinite;flex:none}
 .ring{width:54px;height:54px;border-radius:50%;background:var(--line2);display:grid;place-items:center;flex:none}
 .ring span{width:42px;height:42px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-weight:700;color:var(--fg)}
 .dots span{display:inline-block;width:5px;height:5px;margin:0 2px;border-radius:1px;background:var(--fg);animation:blink 1.1s infinite}
@@ -98,8 +100,8 @@ st.markdown("""<style>
 /* ---- header: ▍ province // system name, mark + wordmark, clock ---- */
 .dash-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:0 0 14px 0;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .dash-title{display:flex;align-items:baseline;gap:10px;line-height:1.1;white-space:nowrap;min-width:0;font-size:1.45rem;color:var(--fg)}
-.dash-title::before{content:"▍";color:var(--acc);margin-right:-4px}
-.dash-title .prov{color:var(--acc);font-weight:700}
+.dash-title::before{content:"▍";color:var(--fg);margin-right:-4px}
+.dash-title .prov{background:var(--hl);color:var(--fg);font-weight:700;padding:0 6px;border-radius:2px}
 .dash-title .chev{color:var(--faint)}
 .dash-title .nm{font-weight:700;letter-spacing:-.01em}
 .dash-title em{font-style:normal;color:var(--mute)}
@@ -110,7 +112,7 @@ st.markdown("""<style>
 .dash-brand .wm{font-size:.86rem;font-weight:700;letter-spacing:.02em;color:var(--fg)}
 .dash-brand .wm::before{content:"[ ";color:var(--faint);font-weight:400} .dash-brand .wm::after{content:" ]";color:var(--faint);font-weight:400}
 .dash-brand .clock{display:flex;align-items:center;gap:7px;font-size:.72rem;color:var(--mute)}
-.dash-brand .clock i{width:7px;height:7px;border-radius:1px;background:var(--acc);animation:live 1.6s steps(2) infinite}
+.dash-brand .clock i{width:7px;height:7px;border-radius:1px;background:var(--hl);box-shadow:inset 0 0 0 1px var(--fg);animation:live 1.6s steps(2) infinite}
 
 /* ---- summary cards ---- */
 .stats{display:flex;flex-direction:column;gap:8px}
@@ -125,16 +127,16 @@ st.markdown("""<style>
 .stat.hot{border-color:var(--alert);box-shadow:inset 3px 0 0 var(--alert)}
 .stat.hot .vl{color:var(--alert)}
 .stat .tip{position:absolute;top:6px;right:7px;width:16px;height:16px;border:1px solid var(--line);border-radius:2px;color:var(--mute);font-size:.62rem;line-height:14px;text-align:center;cursor:help;outline:none}
-.stat .tip:hover, .stat .tip:focus-visible{border-color:var(--acc);color:var(--acc)}
+.stat .tip:hover, .stat .tip:focus-visible{border-color:var(--fg);background:var(--hl);color:var(--fg)}
 .stat .tt{position:absolute;right:-2px;top:21px;width:240px;padding:9px 11px;border-radius:2px;background:#101113;color:#d8d8d4;border:1px solid #3a3b3e;
           font-family:var(--mono);font-size:.72rem;line-height:1.5;text-align:left;text-transform:none;letter-spacing:0;font-weight:400;
           box-shadow:0 8px 20px rgba(0,0,0,.18);opacity:0;visibility:hidden;transform:translateY(-3px);transition:opacity .12s,transform .12s,visibility .12s;z-index:20;pointer-events:none}
-.stat .tt::before{content:"// ";color:#7ee0b5}
+.stat .tt::before{content:"// ";color:#FFD43B}
 .stat .tip:hover .tt, .stat .tip:focus .tt{opacity:1;visibility:visible;transform:none}
 
 /* ---- section label: // LABEL ------- mode ---- */
 .sec-head{display:flex;align-items:center;gap:8px;margin:18px 0 0 0;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
-.sec-head b::before{content:"//";color:var(--acc);font-weight:400}
+.sec-head b::before{content:"//";color:var(--faint);font-weight:400}
 .sec-head i{flex:1;border-top:1px dashed var(--line)}
 .sec-head span{letter-spacing:.04em;text-transform:none;color:var(--faint)}
 
@@ -148,7 +150,7 @@ st.markdown("""<style>
 .pf .knob{position:relative;z-index:1;width:34px;height:34px;border-radius:2px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;color:var(--faint)}
 .pf .knob svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .pf .nd.done .knob{background:var(--fg);border-color:var(--fg);color:var(--bg)}
-.pf .nd.active .knob{border-color:var(--acc);background:var(--acc-soft);color:var(--acc);animation:pulse 1.3s ease-in-out infinite}
+.pf .nd.active .knob{border-color:var(--fg);background:var(--hl);color:var(--fg);animation:pulse 1.3s ease-in-out infinite}
 .pf .nd.skip .knob{border-style:dashed;background:transparent}
 .pf .arc{position:absolute;top:2px;height:36px;left:calc((100% - 80px) / 6 * 2.5 + 16px * 2);width:calc((100% - 80px) / 6 * 2 + 16px * 2);pointer-events:none}
 .pf .arc svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -157,26 +159,26 @@ st.markdown("""<style>
 .pf .arc span{position:absolute;left:50%;top:-6px;transform:translateX(-50%);background:var(--bg);padding:0 6px;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
 .pf .arc.on span{color:var(--fg);font-weight:700}
 .pf .cds{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-top:6px}
-.pf .cd{position:relative;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:2px;background:var(--panel);padding:9px 11px 60px;min-height:212px;min-width:0}   /* bottom: room for lifted buttons */
-.pf .cd.active{border-color:var(--acc);box-shadow:inset 0 2px 0 var(--acc)}
+.pf .cd{position:relative;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:2px;background:var(--panel);padding:9px 11px 60px;height:var(--cardh);min-width:0;overflow:hidden}   /* bottom: room for lifted buttons */
+.pf .cd.active{border-color:var(--fg);box-shadow:inset 0 3px 0 var(--hl)}
 .pf .cd.todo{background:transparent;border-style:dashed} .pf .cd.skip{background:transparent;border-style:dashed}
 .pf .cd .bd{flex:1;display:flex;flex-direction:column}
 .pf .cd .hd{display:flex;align-items:baseline;gap:5px;padding-bottom:7px;margin-bottom:2px;border-bottom:1px dashed var(--line);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden}
 .pf .cd .no{font-weight:700;color:var(--fg)}
-.pf .cd .sl{color:var(--acc)}
+.pf .cd .sl{color:var(--faint)}
 .pf .cd .nm{color:var(--fg);overflow:hidden;text-overflow:ellipsis}
 .pf .cd.todo .no, .pf .cd.todo .nm, .pf .cd.skip .no, .pf .cd.skip .nm, .pf .cd.todo .sl, .pf .cd.skip .sl{color:var(--faint)}
-.pf .cd.active .no, .pf .cd.active .nm{color:var(--acc)}
+.pf .cd.active .no, .pf .cd.active .nm{background:var(--hl);color:var(--fg)}
 .pf .cd .lt{font-size:.62rem;color:var(--mute);white-space:nowrap}
 .pf .cr{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 6px;margin:6px 0 7px}
 .pf .chip2{white-space:nowrap;font-size:.62rem;color:var(--fg);background:var(--bg);border:1px solid var(--line2);border-radius:2px;padding:1px 6px}
 .pf .bd{font-size:.76rem;color:var(--fg);line-height:1.45}
 .pf .big{font-size:.98rem;font-weight:700;line-height:1.25;margin:2px 0 6px;letter-spacing:-.01em}
-.pf .big.sm{font-size:1.05rem;margin-top:8px;color:var(--acc)}
+.pf .big.sm{align-self:flex-start;font-size:1.05rem;margin-top:8px;background:var(--hl);padding:0 4px}
 .pf .ln{margin:2px 0}
 .pf .meta{font-size:.68rem;color:var(--mute);line-height:1.45;margin-top:4px}
-.pf .wait{font-size:.7rem;color:var(--acc);margin-top:6px}
-.pf .wait::before{content:"> "} .pf .wait::after{content:"▌";animation:live 1s steps(2) infinite;margin-left:2px}
+.pf .wait{font-size:.7rem;color:var(--fg);margin-top:6px}
+.pf .wait::before{content:"> "} .pf .wait::after{content:"▌";color:#E0B000;animation:live 1s steps(2) infinite;margin-left:2px}
 .pf .pb{display:grid;grid-template-columns:72px 1fr 30px;align-items:center;gap:6px;font-size:.66rem;color:var(--mute);margin:5px 0;white-space:nowrap}
 .pf .pb .tr{position:relative;height:7px;background:var(--line2)}
 .pf .pb .fl{height:100%}
@@ -184,7 +186,7 @@ st.markdown("""<style>
 .pf .pb b{text-align:right;color:var(--fg);font-weight:700;font-size:.66rem}
 .pf .rt{display:flex;align-items:center;gap:7px;padding:4px 0;margin:2px 0;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
 .pf .rt::before{content:"( )";letter-spacing:0}
-.pf .rt.on{color:var(--fg);font-weight:700} .pf .rt.on::before{content:"(•)";color:var(--acc)}
+.pf .rt.on{color:var(--fg);font-weight:700;background:linear-gradient(transparent 15%,var(--hl) 15%,var(--hl) 85%,transparent 85%);align-self:flex-start;padding-right:4px} .pf .rt.on::before{content:"(•)"}
 .pf .why2{color:var(--mute)}
 .pf .pill{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;padding:4px 8px;border:1px solid var(--v);border-radius:2px;color:var(--v);font-weight:700;font-size:.74rem;line-height:1.3;margin:4px 0 6px;background:var(--panel)}
 .pf .pill::before{content:"";width:8px;height:8px;background:var(--v);flex:none}
@@ -192,7 +194,7 @@ st.markdown("""<style>
 .pf .fact svg{width:18px;height:18px;flex:none}
 .pf .fact b{display:block;font-size:.7rem;line-height:1.25;font-weight:700} .pf .fact span{display:block;font-size:.62rem;color:var(--mute);line-height:1.35}
 .pf .fact.call{border-color:var(--alert);box-shadow:inset 3px 0 0 var(--alert);background:var(--panel)}
-.pf .fact.anchor{margin-top:auto}   /* the call tile sits right above its Cancel / Call now (or Dismiss) buttons */
+.pf .fact.anchor{height:var(--tile-h);flex:none}   /* the call tile (top of the Act card) has a fixed height: its buttons sit right under it */
 .pf .fact .ring{width:34px;height:34px}
 .pf .fact .ring span{display:grid;place-items:center;width:26px;height:26px;font-size:.74rem;font-weight:700;color:var(--fg);background:var(--panel)}
 .pf .think2{position:absolute;inset:0;border-radius:2px;background:var(--panel);display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:.68rem;color:var(--mute)}
@@ -206,6 +208,7 @@ st.markdown("""<style>
 /* ---- buttons in the main area: [ bracketed ], like the Dev Panel ---- */
 [class*="st-key-flow_buttons"]{margin-top:-54px;position:relative;z-index:5}
 [class*="st-key-flow_buttons"] > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]{padding:0 11px}
+[class*="st-key-flow_buttons"] > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(6){transform:translateY(calc(-1 * var(--act-lift)))}   /* Act: under the call tile */
 .st-key-flow_buttons_play{opacity:0;animation:appear .35s ease-out 3.6s forwards}
 .st-key-flow_buttons_playq{opacity:0;animation:appear .35s ease-out 2.1s forwards}
 [data-testid="stMain"] button[data-testid^="stBaseButton"]{border-radius:2px;min-height:32px;padding:2px 8px;box-shadow:none}
@@ -220,8 +223,8 @@ st.markdown("""<style>
 [data-testid="stMain"] button[data-testid="stBaseButton-primary"]{background:var(--alert);border:1px solid var(--alert)}
 [data-testid="stMain"] button[data-testid="stBaseButton-primary"] p{color:#fff;font-weight:700}
 [data-testid="stMain"] button[data-testid="stBaseButton-primary"]:hover{background:#B81E33;border-color:#B81E33}
-[data-testid="stMain"] button[data-testid="stBaseButton-tertiary"]{color:var(--acc);padding:2px 0}
-[data-testid="stMain"] button[data-testid="stBaseButton-tertiary"] p{color:var(--acc)}
+[data-testid="stMain"] button[data-testid="stBaseButton-tertiary"]{color:var(--fg);padding:2px 0}
+[data-testid="stMain"] button[data-testid="stBaseButton-tertiary"] p{color:var(--fg);background:linear-gradient(transparent 60%,var(--hl) 60%)}
 [data-testid="stMain"] button[data-testid="stBaseButton-tertiary"]:hover p{color:var(--fg)}
 [data-testid="stMain"] [data-testid="stCaptionContainer"], [data-testid="stMain"] [data-testid="stCaptionContainer"] p{font-family:var(--mono);font-size:.66rem;color:var(--mute)}
 
@@ -229,7 +232,7 @@ st.markdown("""<style>
 div[data-testid="stDialog"]{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);background:rgba(22,23,26,.25)}   /* blur the app behind the modal */
 div[data-testid="stDialog"] [role="dialog"]{background:var(--bg);border:1px solid var(--fg);border-radius:2px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 div[data-testid="stDialog"] [role="dialog"] h1, div[data-testid="stDialog"] [role="dialog"] h2, div[data-testid="stDialog"] [role="dialog"] h3{font-family:var(--mono);font-weight:700;font-size:1.25rem;color:var(--fg)}
-div[data-testid="stDialog"] [role="dialog"] h2::before, div[data-testid="stDialog"] [role="dialog"] h1::before{content:"▍";color:var(--acc)}
+div[data-testid="stDialog"] [role="dialog"] h2::before, div[data-testid="stDialog"] [role="dialog"] h1::before{content:"▍";color:var(--fg)}
 div[data-testid="stDialog"] [data-testid="stExpander"] details{border:1px dashed var(--line);border-radius:2px;background:var(--panel)}
 div[data-testid="stDialog"] [data-testid="stExpander"] summary p{font-family:var(--mono);font-size:.72rem}
 .mi-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:var(--mute);font-size:.78rem;margin-bottom:8px}
@@ -237,12 +240,12 @@ div[data-testid="stDialog"] [data-testid="stExpander"] summary p{font-family:var
 .mi-head .pill::before{content:"";width:8px;height:8px;background:var(--v)}
 .mi-sec{border:1px solid var(--line);border-radius:2px;padding:12px 14px;margin:10px 0;background:var(--panel)}
 .mi-h{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--fg);font-weight:700;margin-bottom:8px}
-.mi-h::before{content:"// ";color:var(--acc);font-weight:400}
+.mi-h::before{content:"// ";color:var(--faint);font-weight:400}
 .mi-h span{font-weight:400;letter-spacing:.02em;text-transform:none;color:var(--mute);margin-left:6px}
 .mi-why{font-size:.86rem;line-height:1.6;color:var(--fg)}
 .mi-ev{display:grid;grid-template-columns:104px 170px 1fr;gap:12px;align-items:baseline;padding:6px 0;border-top:1px dashed var(--line2);font-size:.76rem}
 .mi-ev:first-of-type{border-top:0}
-.mi-ev .src{font-size:.62rem;letter-spacing:.06em;color:var(--acc);justify-self:start}
+.mi-ev .src{font-size:.62rem;letter-spacing:.06em;color:var(--fg);background:var(--hl);padding:0 4px;justify-self:start}
 .mi-ev .src::before{content:"["} .mi-ev .src::after{content:"]"}
 .mi-ev code{font-size:.7rem;color:var(--mute);background:none;padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mi-kv{display:grid;grid-template-columns:104px 1fr;gap:12px;font-size:.76rem;padding:3px 0}
@@ -507,7 +510,7 @@ def flow_actions_html(ev, pending, call):
             shown = min(remaining, ss.countdown_s)
             deg = int(360 * (1 - shown / max(ss.countdown_s, 1)))
             out += (f'<div class="fact call anchor"><div class="ring" style="background:conic-gradient(var(--signal) {deg}deg,var(--rule) 0)"><span>{shown}</span></div>'
-                    f'<div><b>Calling on-call officer</b><span>{"Real" if ss.real_calls else "Simulated"} call when the ring closes</span></div></div>')
+                    f'<div><b>On-call officer</b><span>Calling · {"real" if ss.real_calls else "simulated"}</span></div></div>')
         elif a == "PAGE":
             status = (call or {}).get("status")
             label = {"CALLING": "Dialling…", "DONE": "Call placed", "FAILED": "Call failed", "SIMULATED": "Call simulated",

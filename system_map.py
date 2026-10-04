@@ -99,7 +99,7 @@ svg.links path{fill:none;stroke-width:1;stroke-dasharray:3 3;opacity:.8;transiti
 .panel{position:absolute;top:0;background:rgba(247,247,245,.97);border:1px solid #C6C6C1;border-left:3px solid var(--c);border-radius:2px;
        padding:5px 9px 6px;white-space:nowrap;font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;color:#16171A;box-shadow:0 4px 12px rgba(0,0,0,.08);
        transition:top .35s ease;max-width:calc(var(--gutter) - 16px);z-index:4}
-.panel::before{content:"";position:absolute;left:-9px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--c);transition:top .35s ease}
+.panel::before{content:"";position:absolute;left:-15px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--c);transition:top .35s ease}   /* left: -(3px border + 12px triangle box): the arrow sits flush outside the border, tip 6px out */
 .panel.nb{padding:3px 9px 4px;font-size:11.5px;line-height:1.25}
 .panel.nb .val{font-size:9.5px}
 .panel .hd{display:flex;align-items:center;gap:6px}
@@ -210,8 +210,9 @@ function layout(s) {
       if (it.fresh) { it.el.style.transition = "none"; it.el.style.top = top + "px"; void it.el.offsetHeight; it.el.style.transition = ""; }
       else it.el.style.top = top + "px";
       it.el.style.setProperty("--notch", notch + "px");
-      const r = it.role === "sel" ? 12 : 8, ny = top + notch, sy = it.y + EDGE;
-      paths += `<path stroke="${it.color}" d="M ${(it.x + r).toFixed(1)} ${sy.toFixed(1)} H ${Math.max(bend, it.x + r)} L ${X - 9} ${ny.toFixed(1)}"/>`;
+      const r = it.role === "sel" ? 12 : 8, ny = top + 1 + notch, sy = it.y + EDGE;   // +1: the notch is measured inside the panel's top border
+      // the connector ends exactly at the arrow's tip, 6px left of the panel's outer edge (X)
+      paths += `<path stroke="${it.color}" d="M ${(it.x + r).toFixed(1)} ${sy.toFixed(1)} H ${Math.max(bend, it.x + r)} L ${X - 6} ${ny.toFixed(1)}"/>`;
       bottom = Math.max(bottom, top + it.h);
     }
   }
