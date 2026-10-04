@@ -788,9 +788,23 @@ else:
     cur_id = picked[0] if len(picked) == 1 else None
 current = None
 if cur_id is not None:
-    r = in_system.set_index("station_id").loc[cur_id]
+    by_id = in_system.set_index("station_id")
+    r = by_id.loc[cur_id]
     spark, spark_label = (None, f"Scenario reading {scenario.value:.3g} m³/s") if scenario is not None else flow_spark(cur_id, T)
-    current = {"id": cur_id, "name": nice_name(r["name"]), "lat": float(r.lat), "lon": float(r.lon), "spark": spark, "spark_label": spark_label}
+    current = {"id": cur_id, "name": nice_name(r["name"]), "lat": float(r.lat), "lon": float(r.lon), "spark": spark, "spark_label": spark_label,
+               "neighbours": []}
+    # its three nearest gauges (nearby_ids, by distance). In a scenario there are no readings at that moment, so show the scenario's input instead.
+    scen_pct = neighbour_pcts(scenario.state_json) if scenario is not None else {}
+    for nid, km in sorted(_nearby(r.get("nearby_ids")), key=lambda x: x[1])[:3]:
+        if nid not in by_id.index or nid == cur_id:
+            continue
+        n = by_id.loc[nid]
+        if scenario is not None:
+            n_spark, n_label = None, (f"Scenario: {scen_pct[nid] * 100:+.0f}% in 24 h" if nid in scen_pct else None)
+        else:
+            n_spark, n_label = flow_spark(nid, T)
+        current["neighbours"].append({"id": nid, "name": nice_name(n["name"]), "lat": float(n.lat), "lon": float(n.lon), "km": km,
+                                      "spark": n_spark, "spark_label": n_label})
 
 st.markdown(f'<div class="dash-head"><div class="dash-title">{system}<span class="chev">›</span>{SYSTEM_NAME.get(system, system)} River System</div>'
             f'<div class="dash-brand"><div class="logo">River Sentinel</div><div class="clock">{fmt(T)} MDT</div></div></div>', unsafe_allow_html=True)
