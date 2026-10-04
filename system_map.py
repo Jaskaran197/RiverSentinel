@@ -21,12 +21,11 @@ import streamlit as st
 MAPLIBRE_JS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"
 MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css"
 
-# "Nocturne" palette: a night basemap — aubergine land, deep periwinkle water, luminous rivers, cream labels. Relationships to keep when
-# restyling: rivers the brightest lines, water distinct from land, roads faint; stations cream, out-of-selection stations dim, current =
-# signal red, neighbours = periwinkle.
-C = {"bg": "#15111B", "land": "#1B1622", "water": "#262B57", "river": "#8EA2FF", "stream": "#4C5398", "road": "#3A3146",
-     "road_case": "#15111B", "border": "#5A5068", "label": "#D9D0E2", "label_soft": "#8F869B", "halo": "#120E17",
-     "station": "#EDE6D6", "station_off": "#5A5266", "current": "#FF4B2B", "neighbour": "#8EA2FF"}
+# the first version's neutral grayscale basemap (water and rivers the darkest, roads lightest); stations dark grey, out-of-selection stations
+# faded, current = crimson, neighbours = azure. Panels follow the dashboard's "Inverted Panel" look (mono, square, 1px rules).
+C = {"bg": "#efefed", "land": "#e6e6e3", "water": "#a9a9a5", "river": "#5f5f5b", "stream": "#8d8d89", "road": "#fbfbfa",
+     "road_case": "#c4c4c0", "border": "#9a9a96", "label": "#3b3b39", "label_soft": "#6b6b67", "halo": "#f4f4f2",
+     "station": "#3a3a3a", "station_off": "#b3b3af", "current": "#d7263d", "neighbour": "#1f6fd1"}
 
 STYLE = {
     "version": 8,
@@ -43,10 +42,10 @@ STYLE = {
         {"id": "bg", "type": "background", "paint": {"background-color": C["bg"]}},
         {"id": "landcover", "type": "fill", "source": "omt", "source-layer": "landcover",
          "filter": ["in", ["get", "class"], ["literal", ["wood", "forest", "grass", "ice"]]],
-         "paint": {"fill-color": C["land"], "fill-opacity": 0.5}},
+         "paint": {"fill-color": C["land"], "fill-opacity": 0.6}},
         {"id": "hillshade", "type": "hillshade", "source": "dem",
-         "paint": {"hillshade-shadow-color": "#05030A", "hillshade-highlight-color": "#3B3048", "hillshade-accent-color": "#231C2C",
-                   "hillshade-exaggeration": 0.45, "hillshade-illumination-direction": 315}},
+         "paint": {"hillshade-shadow-color": "#555552", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#7d7d79",
+                   "hillshade-exaggeration": 0.4, "hillshade-illumination-direction": 315}},
         {"id": "water", "type": "fill", "source": "omt", "source-layer": "water", "paint": {"fill-color": C["water"]}},
         {"id": "waterway-stream", "type": "line", "source": "omt", "source-layer": "waterway",
          "filter": ["!=", ["get", "class"], "river"], "minzoom": 8,
@@ -85,32 +84,32 @@ GUTTER = 240          # px on the map's right kept clear of stations (fit paddin
 _CSS = """
 :host{display:block}
 .wrap{position:relative}
-.rsmap{position:relative;border:1px solid rgba(237,230,214,.14);border-radius:20px;overflow:hidden;background:#15111B;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.rsmap{position:relative;border:1px solid #C6C6C1;border-radius:2px;overflow:hidden;background:#efefed}
 .canvas{position:absolute;inset:0}
-.msg{position:absolute;inset:0;display:grid;place-items:center;color:#9C93A6;font:400 11px/1 'Space Mono',ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase}
+.msg{position:absolute;inset:0;display:grid;place-items:center;color:#74746F;font:400 11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace}
 .cur{position:relative;width:14px;height:14px}
-.cur .dot{position:absolute;inset:0;border-radius:50%;background:var(--cur);box-shadow:0 0 0 2px #120E17,0 0 14px var(--cur)}
+.cur .dot{position:absolute;inset:0;border-radius:50%;background:var(--cur);box-shadow:0 0 0 2px #fff}
 .cur .ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cur);animation:pulse 1.8s ease-out infinite}
 .cur .ring.r2{animation-delay:.9s}
 @keyframes pulse{from{transform:scale(1);opacity:.9} to{transform:scale(3.6);opacity:0}}
 /* connectors: station -> map edge -> panel notch (straight when the panel sits level with its station, elbowed when displaced) */
 svg.links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:3}
-svg.links path{fill:none;stroke-width:1.2;stroke-dasharray:2 3;opacity:.9;transition:d .35s ease}
+svg.links path{fill:none;stroke-width:1;stroke-dasharray:3 3;opacity:.8;transition:d .35s ease}
 /* panels: bolted onto the map's right edge, stacked without overlap; notch at the station's height */
-.panel{position:absolute;top:0;background:rgba(27,22,34,.78);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(237,230,214,.14);border-left:2px solid var(--c);border-radius:4px 12px 12px 4px;
-       padding:5px 10px 6px;white-space:nowrap;font:12px/1.3 'Inter Tight',system-ui,sans-serif;color:#EDE6D6;box-shadow:0 10px 28px rgba(0,0,0,.4);
+.panel{position:absolute;top:0;background:rgba(247,247,245,.97);border:1px solid #C6C6C1;border-left:3px solid var(--c);border-radius:2px;
+       padding:5px 9px 6px;white-space:nowrap;font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;color:#16171A;box-shadow:0 4px 12px rgba(0,0,0,.08);
        transition:top .35s ease;max-width:calc(var(--gutter) - 16px);z-index:4}
 .panel::before{content:"";position:absolute;left:-9px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--c);transition:top .35s ease}
 .panel.nb{padding:3px 9px 4px;font-size:11.5px;line-height:1.25}
 .panel.nb .val{font-size:9.5px}
 .panel .hd{display:flex;align-items:center;gap:6px}
-.panel .id{font:700 11px/1.2 'Space Mono',ui-monospace,monospace;letter-spacing:.04em}
-.panel .badge{background:var(--c);color:#120E17;font:700 8px/1.6 'Space Mono',ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;padding:0 7px;border-radius:999px}
-.panel .nm{color:#B7AEC2;overflow:hidden;text-overflow:ellipsis}
+.panel .id{font:700 11px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace}
+.panel .badge{color:var(--c);font:700 9px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;text-transform:lowercase;padding:0}
+.panel .badge::before{content:"["} .panel .badge::after{content:"]"}
+.panel .nm{color:#55555A;overflow:hidden;text-overflow:ellipsis}
 .panel svg{display:block;margin-top:3px}
-.panel .val{font:10px/1.3 'Space Mono',ui-monospace,monospace;color:#9C93A6;margin-top:1px}
+.panel .val{font:10px/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;color:#74746F;margin-top:1px}
 .maplibregl-ctrl-attrib{font-size:10px}
-.maplibregl-ctrl-attrib.maplibregl-compact{background:rgba(237,230,214,.85)}
 """
 
 _JS = """
@@ -257,7 +256,7 @@ export default function (component) {
         map.addLayer({ id: "stations", type: "circle", source: "stations", paint: {
           "circle-radius": ["match", ["get", "role"], "nb", 6, "on", 5, 4],
           "circle-color": ["match", ["get", "role"], "nb", col.neighbour, "on", col.station, col.station_off],
-          "circle-stroke-color": "#120E17", "circle-stroke-width": ["match", ["get", "role"], "nb", 2, 1.5] } });
+          "circle-stroke-color": "#ffffff", "circle-stroke-width": ["match", ["get", "role"], "nb", 2, 1.5] } });
         mapEl.querySelector(".msg").remove();
         mapEl.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");   // start collapsed (the "i" opens it)
         s.ready = true; apply(s);
