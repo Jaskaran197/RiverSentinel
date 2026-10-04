@@ -155,6 +155,23 @@ st.markdown("""<style>
 .dash-brand .clock{font-size:.95rem;color:#52514e;margin-top:2px;font-variant-numeric:tabular-nums}
 .legacy-sep{margin:72px 0 28px 0;padding-top:10px;border-top:2px dashed #e1e0d9;color:#898781;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}
 
+/* ---- summary cards (beside the map) ---- */
+.stats{display:flex;flex-direction:column;gap:8px}
+.stat{flex:1;position:relative;display:flex;align-items:center;gap:12px;border:1px solid #e1e0d9;border-radius:6px;background:#fff;padding:8px 12px;min-height:0}
+.stat .ic{flex:none;width:38px;height:38px;border-radius:50%;background:#f4f3ef;display:grid;place-items:center}
+.stat .ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.stat .tx{min-width:0}
+.stat .lb{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#52514e}
+.stat .vl{font-size:1.55rem;font-weight:650;line-height:1.15;color:#0b0b0b;font-variant-numeric:tabular-nums}
+.stat .sb{font-size:.78rem;color:#898781;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .tip{position:absolute;top:7px;right:8px;width:16px;height:16px;border-radius:50%;border:1px solid #c3c2b7;color:#898781;font-size:.66rem;
+           line-height:14px;text-align:center;cursor:help;outline:none}
+.stat .tip:hover, .stat .tip:focus-visible{border-color:#52514e;color:#0b0b0b}
+.stat .tt{position:absolute;right:-2px;top:22px;width:230px;padding:8px 10px;border-radius:6px;background:#0b0b0b;color:#f4f3ef;font-size:.78rem;line-height:1.4;
+          text-align:left;text-transform:none;letter-spacing:0;font-weight:400;box-shadow:0 6px 18px rgba(0,0,0,.18);opacity:0;visibility:hidden;
+          transform:translateY(-3px);transition:opacity .15s,transform .15s,visibility .15s;z-index:20;pointer-events:none}
+.stat .tip:hover .tt, .stat .tip:focus .tt{opacity:1;visibility:visible;transform:none}
+
 /* ---- dev panel (sidebar): a utilitarian overlay, deliberately unlike the dashboard — "stats for nerds" ---- */
 section[data-testid="stSidebar"]{--dv-bg:rgba(16,17,19,.94);--dv-fg:#d8d8d4;--dv-mute:#8b8b86;--dv-line:#3a3b3e;--dv-acc:#7ee0b5;
   --dv-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;background:var(--dv-bg);border-right:1px solid var(--dv-line)}
@@ -780,6 +797,37 @@ def flow_spark(station_id, t_end, hours=24, max_pts=96):
     if (len(d) - 1) % step: vals.append(float(d.iloc[-1]))          # always end on the latest reading
     return vals, f"{d.iloc[-1]:.3g} m³/s · last {hours} h"
 
+STAT_ICON = {   # 24x24 stroke icons, coloured by the card
+    "anomalies": '<path d="M2 13h4l2.2-6 3.3 11 2.4-8 1.6 3H22"/>',
+    "auto": '<path d="M12.5 2 5 13h6l-1 9 4.2-6"/><path d="m15 18 2.2 2.2L22 15.5"/>',
+    "tickets": '<path d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2.1 2.1 0 0 1-3-3l9.4-9.4z"/><path d="M14.7 6.3 17 4"/>',
+    "pages": '<path d="M19.5 15.8v2.6a1.8 1.8 0 0 1-2 1.8 17.5 17.5 0 0 1-7.6-2.7 17.2 17.2 0 0 1-5.3-5.3 17.5 17.5 0 0 1-2.7-7.6 1.8 1.8 0 0 1 1.8-2h2.6a1.8 1.8 0 0 1 1.8 1.5c.1.8.3 1.6.6 2.3a1.8 1.8 0 0 1-.4 1.9L7.2 9.4a14 14 0 0 0 5.3 5.3l1.1-1.1a1.8 1.8 0 0 1 1.9-.4c.7.3 1.5.5 2.3.6a1.8 1.8 0 0 1 1.7 1.8z"/>'
+             '<path d="M15 2.5a6.5 6.5 0 0 1 6.5 6.5"/><path d="M15 6a3 3 0 0 1 3 3"/>',
+}
+
+def summary_cards(seen: pd.DataFrame, height: int) -> str:
+    """Four stacked summary cards (icon, label, value, context line, definition tooltip) filling `height` px."""
+    n = len(seen)
+    auto = int((seen.route == "AUTO_RESOLVE").sum())
+    tickets, quarantined = int(has(seen, "TICKET").sum()), int(has(seen, "QUARANTINE").sum())
+    paged = seen[has(seen, "PAGE")]
+    cards = [
+        ("anomalies", "Anomalies", n, f"across {seen.station_id.nunique()} gauge{'s' if seen.station_id.nunique() != 1 else ''}" if n else "none yet", INK,
+         "Readings the rule-based detector flagged as unusual — a spike, flatline, step, fast rise, gap or impossible value — up to the time shown."),
+        ("auto", "Auto-resolved", f"{auto / n * 100:.0f}%" if n else "–", f"{auto} of {n}" if n else "nothing to settle yet", VERDICT_COLOR["NATURAL_EVENT"],
+         "Share of anomalies the quick AI check (ai_decide) settled confidently on its own, without the slower LLM investigation."),
+        ("tickets", "Field tickets", tickets, f"{quarantined} reading{'s' if quarantined != 1 else ''} quarantined", VERDICT_COLOR["SENSOR_FAULT"],
+         "Bad-sensor cases sent to a field technician. Their readings are quarantined so they don't skew downstream models."),
+        ("pages", "On-call pages", int(paged.event_key.nunique()), f"last: {fmt(paged.visible_at.max())}" if len(paged) else "no calls yet", "#d03b3b",
+         "Phone calls to the on-call duty officer for likely real floods — counted once per gauge per event."),
+    ]
+    html = "".join(
+        f'<div class="stat"><div class="ic" style="color:{col}"><svg viewBox="0 0 24 24" aria-hidden="true">{STAT_ICON[k]}</svg></div>'
+        f'<div class="tx"><div class="lb">{lab}</div><div class="vl">{val}</div><div class="sb">{sub}</div></div>'
+        f'<span class="tip" tabindex="0" role="button" aria-label="What is {lab}?">?<span class="tt" role="tooltip">{tip}</span></span></div>'
+        for k, lab, val, sub, col, tip in cards)
+    return f'<div class="stats" style="height:{height}px">{html}</div>'
+
 if scenario is not None:                        # which station the map highlights
     cur_id = scenario.station_id if scenario.station_id in set(in_system.station_id) else None
 elif latest is not None:
@@ -808,11 +856,14 @@ if cur_id is not None:
 
 st.markdown(f'<div class="dash-head"><div class="dash-title">{system}<span class="chev">›</span>{SYSTEM_NAME.get(system, system)} River System</div>'
             f'<div class="dash-brand"><div class="logo">River Sentinel</div><div class="clock">{fmt(T)} MDT</div></div></div>', unsafe_allow_html=True)
-map_col, _ = st.columns([4, 1])                     # the map component = map (~same width as before) + a 240 px gutter for its station panel
+MAP_H = 380                                          # map height; the summary cards fill the same height beside it
+map_col, stats_col = st.columns([3.2, 1], gap="medium")   # map column = map + a 240 px gutter for its station panels
 with map_col:
     in_sel = set(lanes.station_id)
     system_map(system, [{"id": r.station_id, "name": nice_name(r.name), "lat": float(r.lat), "lon": float(r.lon), "on": r.station_id in in_sel}
-                        for r in in_system.itertuples()], current, key="system_map", height=380)
+                        for r in in_system.itertuples()], current, key="system_map", height=MAP_H)
+with stats_col:
+    stats_col.markdown(summary_cards(seen, MAP_H + 2), unsafe_allow_html=True)
 st.markdown('<div class="legacy-sep">Legacy dashboard — being phased out</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------------- header
