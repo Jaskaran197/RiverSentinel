@@ -47,6 +47,7 @@ from logic import (MDT, derive, has, fmt, _safe_json, _ids, _nearby, neighbour_p
                    decide_route, finalize, pct, nice_name, humanize, scenario_event)
 from scenarios import SCENARIOS
 from player import player
+from system_map import system_map
 
 def mdt(x):
     """UTC time(s) → naive MDT wall-clock time for charts (Plotly has no time zones and can't parse offsets in shapes)."""
@@ -72,7 +73,7 @@ ACTION_SYMBOL = {"PAGE": "star", "QUARANTINE": "x", "TICKET": "square", "WATCH":
 
 st.set_page_config(page_title="RiverSentinel", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""<style>
-.block-container{padding-top:1rem;padding-bottom:2rem}
+[data-testid="stMainBlockContainer"]{padding:3.25rem 2rem 2rem 2rem;max-width:none}   /* full width; top clears the toolbar */
 .card{border:1px solid #e1e0d9;border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fcfcfb}
 .card h4{margin:0 0 6px 0;font-size:1.02rem}
 .card .row{margin:3px 0;color:#0b0b0b}
@@ -144,6 +145,15 @@ st.markdown("""<style>
 .lat{float:right;font-size:.72rem;color:#898781;font-family:ui-monospace,Menlo,Consolas,monospace}
 .pop{animation:appear .35s ease-out}
 .livenote{margin-top:8px;font-size:.76rem;color:#898781}
+
+/* ---- dashboard header (new) ---- */
+.dash-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:0 0 14px 0}
+.dash-title{font-size:1.65rem;font-weight:650;color:#0b0b0b;line-height:1.2}
+.dash-title .chev{color:#c3c2b7;margin:0 .4em;font-weight:400}
+.dash-brand{text-align:right;flex:none}
+.dash-brand .logo{font-size:1.25rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#0b0b0b}
+.dash-brand .clock{font-size:.95rem;color:#52514e;margin-top:2px;font-variant-numeric:tabular-nums}
+.legacy-sep{margin:72px 0 28px 0;padding-top:10px;border-top:2px dashed #e1e0d9;color:#898781;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}
 
 /* ---- dev panel (sidebar): a utilitarian overlay, deliberately unlike the dashboard — "stats for nerds" ---- */
 section[data-testid="stSidebar"]{--dv-bg:rgba(16,17,19,.94);--dv-fg:#d8d8d4;--dv-mute:#8b8b86;--dv-line:#3a3b3e;--dv-acc:#7ee0b5;
@@ -624,7 +634,8 @@ golden, plan = load_results()
 T_MIN = datetime(2026, 9, 1, tzinfo=MDT)       # seek range is pinned, in MDT like every displayed time
 T_MAX = datetime(2026, 10, 2, tzinfo=MDT)
 
-SYSTEM_LABEL = {"AB": "AB - Bow & Elbow", "NS": "NS - Cape Breton"}
+SYSTEM_NAME = {"AB": "Bow & Elbow", "NS": "Cape Breton"}
+SYSTEM_LABEL = {p: f"{p} - {n}" for p, n in SYSTEM_NAME.items()}
 SPEED_LABEL = {5: "5 min/s", 15: "15 min/s", 30: "30 min/s", 60: "1 hr/s", 120: "2 hr/s", 180: "3 hr/s"}
 DELAY_S = [5, 10, 15, 30]
 SCENARIO_LIST = sorted(SCENARIOS, key=lambda s_: s_["name"])
@@ -751,6 +762,45 @@ for ev in (just_now.sort_values("visible_at", ascending=False).itertuples() if s
         if ss.pending_call is None:                     # one call per event even if several detectors fired together
             on_page(ev)
 
+latest = None                                   # the current record: newest one seen, or the one a call belongs to
+if len(seen):
+    latest = seen.sort_values("visible_at").iloc[-1]
+    if ss.pending_call and (seen.candidate_id == ss.pending_call["candidate_id"]).any():
+        latest = seen[seen.candidate_id == ss.pending_call["candidate_id"]].iloc[0]   # the card must be the one the call belongs to
+
+# ----------------------------------------------------------------------------- dashboard (new, in development)
+def flow_spark(station_id, t_end, hours=24, max_pts=96):
+    """Recent flow at a station for the map label: (values, label) or (None, None) without discharge data."""
+    rd = load_readings(station_id, "DISCHARGE")
+    d = rd[(rd.ts_utc > t_end - timedelta(hours=hours)) & (rd.ts_utc <= t_end)].value.dropna()
+    if len(d) < 2:
+        return None, None
+    step = -(-len(d) // max_pts)                 # ceil: at most max_pts points
+    vals = [float(v) for v in d.iloc[::step]]
+    if (len(d) - 1) % step: vals.append(float(d.iloc[-1]))          # always end on the latest reading
+    return vals, f"{d.iloc[-1]:.3g} m³/s · last {hours} h"
+
+if scenario is not None:                        # which station the map highlights
+    cur_id = scenario.station_id if scenario.station_id in set(in_system.station_id) else None
+elif latest is not None:
+    cur_id = latest.station_id
+else:
+    cur_id = picked[0] if len(picked) == 1 else None
+current = None
+if cur_id is not None:
+    r = in_system.set_index("station_id").loc[cur_id]
+    spark, spark_label = (None, f"Scenario reading {scenario.value:.3g} m³/s") if scenario is not None else flow_spark(cur_id, T)
+    current = {"id": cur_id, "name": nice_name(r["name"]), "lat": float(r.lat), "lon": float(r.lon), "spark": spark, "spark_label": spark_label}
+
+st.markdown(f'<div class="dash-head"><div class="dash-title">{system}<span class="chev">›</span>{SYSTEM_NAME.get(system, system)} River System</div>'
+            f'<div class="dash-brand"><div class="logo">River Sentinel</div><div class="clock">{fmt(T)} MDT</div></div></div>', unsafe_allow_html=True)
+map_col, _ = st.columns([1.35, 1])
+with map_col:
+    in_sel = set(lanes.station_id)
+    system_map(system, [{"id": r.station_id, "name": nice_name(r.name), "lat": float(r.lat), "lon": float(r.lon), "on": r.station_id in in_sel}
+                        for r in in_system.itertuples()], current, key="system_map", height=380)
+st.markdown('<div class="legacy-sep">Legacy dashboard — being phased out</div>', unsafe_allow_html=True)
+
 # ----------------------------------------------------------------------------- header
 st.caption("RiverSentinel · river gauge watch, replayed over September 2026. The screen shows only what the system knew at the time shown.")
 st.markdown(f"## {fmt(T)}", unsafe_allow_html=True)
@@ -771,10 +821,7 @@ if scenario is not None:
     ss.scenario_fresh = False
     st.caption(f"Route cut-off {AUTO_RESOLVE_THRESHOLD:.2f} (round R2) · neighbours count as moving above {int(NEIGHBOUR_MOVE_PCT*100)} % · "
                f"model {LLM_MODEL}. The scenario is not written to the tables.")
-elif len(seen):
-    latest = seen.sort_values("visible_at").iloc[-1]
-    if ss.pending_call and (seen.candidate_id == ss.pending_call["candidate_id"]).any():
-        latest = seen[seen.candidate_id == ss.pending_call["candidate_id"]].iloc[0]   # the card must be the one the call belongs to
+elif latest is not None:
     fresh = settled and ss.get("last_hero") != latest.candidate_id
     if settled:
         ss.last_hero = latest.candidate_id
