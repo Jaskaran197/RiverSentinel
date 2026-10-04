@@ -44,7 +44,7 @@ CATALOG = os.environ.get("CATALOG", "river")
 
 # decision rules + helpers (no Streamlit); imported after load_env() because logic reads the environment
 from logic import (MDT, derive, has, fmt, _safe_json, _ids, _nearby, neighbour_pcts, AUTO_RESOLVE_THRESHOLD, NEIGHBOUR_MOVE_PCT,
-                   decide_route, finalize, pct, nice_name, humanize, scenario_event)
+                   decide_route, finalize, pct, nice_name, humanize, scenario_event, route_with_reason, gate_from_probs)
 from scenarios import SCENARIOS
 from player import player
 from system_map import system_map
@@ -171,6 +171,74 @@ st.markdown("""<style>
           text-align:left;text-transform:none;letter-spacing:0;font-weight:400;box-shadow:0 6px 18px rgba(0,0,0,.18);opacity:0;visibility:hidden;
           transform:translateY(-3px);transition:opacity .15s,transform .15s,visibility .15s;z-index:20;pointer-events:none}
 .stat .tip:hover .tt, .stat .tip:focus .tt{opacity:1;visibility:visible;transform:none}
+
+/* ---- process flow (new) ---- */
+.sec-head{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#52514e;font-weight:600;margin:26px 0 2px 0}
+.sec-head span{margin-left:10px;font-weight:400;letter-spacing:.04em;text-transform:none;color:#898781}
+.pf{--on:#0b0b0b;--off:#e1e0d9;margin-top:6px}
+.pf .trk{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:14px;height:62px}
+.pf .nd{position:relative;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px}
+.pf .sg{position:absolute;bottom:20px;height:3px;background:var(--off);border-radius:2px}
+.pf .sg.l{left:-7px;right:50%} .pf .sg.r{left:50%;right:-7px}
+.pf .sg.on{background:var(--on)} .pf .sg.dim{background:repeating-linear-gradient(90deg,#d6d5ce 0 5px,transparent 5px 9px)}
+.pf .knob{position:relative;z-index:1;width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--off);display:grid;place-items:center;color:#b5b4ab}
+.pf .knob svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.pf .nd.done .knob{background:var(--on);border-color:var(--on);color:#fff}
+.pf .nd.active .knob{border-color:var(--on);color:var(--on);animation:ndpulse 1.3s ease-in-out infinite}
+.pf .nd.skip .knob{border-style:dashed;color:#c3c2b7;background:#fafaf8}
+@keyframes ndpulse{0%,100%{box-shadow:0 0 0 0 rgba(11,11,11,.25)} 50%{box-shadow:0 0 0 8px rgba(11,11,11,0)}}
+/* the fork: a "clear-cut" bypass from Route over Investigate to Verdict */
+.pf .arc{position:absolute;top:2px;height:38px;left:calc((100% - 70px) / 6 * 2.5 + 14px * 2);width:calc((100% - 70px) / 6 * 2 + 14px * 2);pointer-events:none}
+.pf .arc svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.pf .arc path{fill:none;stroke:var(--off);stroke-width:3;stroke-linecap:round}
+.pf .arc.on path{stroke:var(--on)} .pf .arc.dim path{stroke:#d6d5ce;stroke-dasharray:5 4}
+.pf .arc span{position:absolute;left:50%;top:-4px;transform:translateX(-50%);background:#fff;padding:0 6px;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:#898781}
+.pf .arc.on span{color:var(--on);font-weight:600}
+/* stop cards */
+.pf .cds{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:6px}
+.pf .cd{position:relative;border:1px solid #e1e0d9;border-radius:8px;background:#fff;padding:10px 12px 12px;min-height:178px;min-width:0}
+.pf .cd.done{border-color:#cfcec6} .pf .cd.active{border-color:var(--on);box-shadow:0 0 0 3px rgba(11,11,11,.06)}
+.pf .cd.todo{background:#fbfbf9} .pf .cd.skip{background:#fbfbf9;border-style:dashed}
+.pf .cd .hd{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.pf .cd .nm{white-space:nowrap;font-size:.74rem;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#0b0b0b}
+.pf .cd.todo .nm, .pf .cd.skip .nm{color:#a3a29a}
+.pf .cd .lt{font-size:.7rem;color:#898781;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
+.pf .chip2{display:inline-block;margin:5px 0 6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.68rem;color:#52514e;background:#f1f0eb;border-radius:4px;padding:1px 6px}
+.pf .bd{font-size:.86rem;color:#0b0b0b}
+.pf .big{font-size:1.08rem;font-weight:650;line-height:1.25;margin:2px 0 4px} .pf .big.sm{font-size:.98rem;margin-top:6px}
+.pf .ln{line-height:1.35;margin:2px 0}
+.pf .meta{font-size:.76rem;color:#898781;line-height:1.35;margin-top:4px}
+.pf .wait{color:#52514e;font-size:.84rem;margin-top:6px} .pf .wait::after{content:"";display:inline-block;width:1.2em;animation:ell 1.2s steps(4) infinite;overflow:hidden;vertical-align:bottom}
+@keyframes ell{0%{content:""} 25%{content:"."} 50%{content:".."} 75%{content:"..."}}
+.pf .pb{display:grid;grid-template-columns:62px 1fr 32px;align-items:center;gap:6px;font-size:.74rem;color:#52514e;margin:3px 0}
+.pf .pb .tr{position:relative;height:7px;background:#efeeea;border-radius:4px}
+.pf .pb .fl{height:100%;border-radius:4px}
+.pf .pb i{position:absolute;top:-3px;bottom:-3px;width:2px;background:#0b0b0b;opacity:.55}
+.pf .pb b{text-align:right;color:#0b0b0b;font-weight:600}
+.pf .rt{display:flex;align-items:center;gap:7px;border:1px solid #e1e0d9;border-radius:6px;padding:5px 8px;margin:4px 0;font-size:.82rem;color:#a3a29a}
+.pf .rt::before{content:"";width:9px;height:9px;border-radius:50%;border:2px solid currentColor}
+.pf .rt.on{border-color:#0b0b0b;color:#0b0b0b;font-weight:600} .pf .rt.on::before{background:#0b0b0b}
+.pf .why2{color:#52514e}
+.pf .pill{display:inline-block;padding:4px 12px;border-radius:999px;color:#fff;font-weight:650;font-size:.92rem;margin:4px 0 4px}
+.pf .fact{display:flex;align-items:center;gap:8px;border:1px solid #e1e0d9;border-radius:6px;padding:6px 8px;margin:4px 0}
+.pf .fact svg{width:20px;height:20px;flex:none}
+.pf .fact b{display:block;font-size:.8rem;line-height:1.2} .pf .fact span{display:block;font-size:.7rem;color:#898781;line-height:1.25}
+.pf .fact.call{border-color:#d03b3b}
+.pf .fact .ring{width:34px;height:34px} .pf .fact .ring span{width:26px;height:26px;font-size:.78rem;color:#0b0b0b}
+.pf .think2{position:absolute;inset:0;border-radius:8px;background:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#52514e;font-size:.84rem}
+/* reasoning strip */
+.pf .strip{margin-top:12px;border:1px solid #e1e0d9;border-left:4px solid #898781;border-radius:6px;background:#fff;padding:10px 14px}
+.pf .sh{font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:#898781}
+.pf .tx2{font-size:.95rem;line-height:1.5;color:#0b0b0b;margin:4px 0 6px;font-style:italic}
+.pf .chips2 span{display:inline-block;border:1px solid #e1e0d9;border-radius:999px;padding:2px 10px;margin:3px 6px 0 0;font-size:.8rem;color:#52514e;background:#fbfbf9}
+/* replay: a timed reveal along the track (delays per stop in --d) */
+.pf.play .nd, .pf.play .cd{opacity:0;animation:appear .4s ease-out var(--d) forwards}
+.pf.play .sg.on{transform-origin:left;transform:scaleX(0);animation:grow .4s ease-out var(--d) forwards}
+.pf.play .arc{clip-path:inset(0 100% 0 0);animation:reveal .55s ease-out var(--d) forwards}   /* wipe left to right (a dash draw breaks with non-scaling strokes) */
+.pf.play .think2{display:flex;animation:fadeout .3s ease-out 3.1s forwards}
+.pf.play .strip{opacity:0;animation:appear .5s ease-out var(--d) forwards}
+.pf.play .nd.done .knob{animation:ndpop .45s ease-out var(--d) both}
+@keyframes ndpop{0%{transform:scale(.6)} 70%{transform:scale(1.12)} 100%{transform:scale(1)}}
 
 /* ---- dev panel (sidebar): a utilitarian overlay, deliberately unlike the dashboard — "stats for nerds" ---- */
 section[data-testid="stSidebar"]{--dv-bg:rgba(16,17,19,.94);--dv-fg:#d8d8d4;--dv-mute:#8b8b86;--dv-line:#3a3b3e;--dv-acc:#7ee0b5;
@@ -580,70 +648,218 @@ def hero(ev, fresh: bool, pending, call):
                           f'<div class="step s2 {pop}"><div class="t">Quick check <span class="lat">{gate_lat}</span></div><span class="model">ai_decide · Jev</span>{s2_body}</div>'
                           + (closer_html if stage != "gate_running" else "") + decision_html + '</div>' + tail + note + '</div>', unsafe_allow_html=True)
 
-        cached = ss.live_results.get(ev.candidate_id)
-        if (ss.live_mode or dynamic) and fresh and cached is None:
-            # --- real-time path: run the two models now, painting each stage as its result arrives
-            paint("gate_running")
-            try:
-                gate, gate_ms = run_gate_live(ev.state_json)
-            except Exception as e:
-                gate, gate_ms = None, None
-                st.caption(f"Live ai_decide unavailable ({str(e)[:90]}); showing the stored result.")
-            if dynamic:                                     # a user event: the route is decided now, from the live gate
-                ev.route = decide_route(ev, gate); closer = ev.route == "INVESTIGATE"
-            llm, llm_ms = None, None
-            if closer:
-                paint("llm_running", gate, gate_ms)
-                try:
-                    llm, llm_ms = run_llm_live(ev.agent_state or ev.state_json)
-                except Exception as e:
-                    st.caption(f"Live ai_query unavailable ({str(e)[:90]}); showing the stored reasoning.")
-            if dynamic:                                     # verdict, severity and actions from the same rules as the pipeline
-                finalize(ev, gate, llm)
-                vc = VERDICT_COLOR.get(ev.verdict, MUTED); sev = SEVERITY_WORD.get(ev.severity, "")
-                why = humanize(ev.rationale); facts = [humanize(e.get("fact", "")) for e in _safe_json(ev.evidence) if e.get("fact")][:3]
-                acts = sorted(ev.actions, key=lambda x: ACTION_ORDER.index(x) if x in ACTION_ORDER else 9) or ["LOG"]
-                used_rain = '"RAIN"' in (ev.evidence or "")
-                paint_head()
-                if "PAGE" in ev.actions and ss.pending_call is None:
-                    on_page(ev); pending = ss.pending_call
-                    ss.paged.add(ev.candidate_id)
-            ss.live_results[ev.candidate_id] = {"gate": gate, "gate_ms": gate_ms, "llm": llm, "llm_ms": llm_ms}
-            paint("done", gate, gate_ms, llm, llm_ms)
-            if pending is not None:                      # the countdown starts only after the live decision is on screen
-                pending["deadline"] = time.time() + ss.countdown_s
-            ss.hero_shown_at = 0                           # nothing left to reveal; reruns may proceed
-        elif cached is not None:
+        cached = ss.live_results.get(ev.candidate_id)     # live results come from run_live (process flow); this card only shows them
+        if cached is not None:
             paint("done", cached["gate"], cached["gate_ms"], cached["llm"], cached["llm_ms"])
         else:
             paint("done", css_play=anim)                    # replay mode: stored values with the CSS reveal
 
 
-    # call controls (Streamlit buttons cannot live inside the HTML)
-    if pending is not None:
-        remaining = int(round(pending["deadline"] - time.time()))
-        b1, b2, b3 = st.columns([4, 1, 1])
-        if remaining > 0:
-            mode = "A real call will be placed" if ss.real_calls else "Simulated: no real call will be placed"
-            b1.caption(f"The system has decided to call. {mode} in {remaining} s unless someone cancels.")
-            if b2.button("Cancel", width="stretch", key="cancel_call"):
-                ss.calls[ev.candidate_id] = {"status": "CANCELLED", "result": "cancelled by operator"}
-                ss.pending_call = None
-                st.rerun()
-            if b3.button("Call now", width="stretch", type="primary", key="call_now"):
-                pending["deadline"] = time.time()
-                st.rerun()
+
+# ----------------------------------------------------------------------------- process flow (new): one record's path, Detect → Act
+FLOW_STAGES = ["Detect", "Quick check", "Route", "Investigate", "Verdict", "Act"]
+ROUTE_REASON = {
+    "NO_GATE": "No quick-check result, so it takes a closer look.",
+    "ALWAYS_RISE": "A fast rise is always investigated — it could be a flood starting.",
+    "ALWAYS_HIGH_BREACH": "A reading above the plausible maximum could be a real flood, so it is always investigated.",
+    "BELOW_CUTOFF": "The top answer, {top}, is below the {thr} cut-off.",
+    "FAULT_FITS": "{top} sure it's a bad sensor, which fits {rule}.",
+    "DAM_FITS": "{top} sure it's a dam or operator change on a regulated reach.",
+    "LABEL_MISMATCH": "{top} sure it's “{label}”, but that doesn't fit {rule}, so it takes a closer look.",
+}
+FLOW_ICON = {   # 24x24 stroke icons for the six stops
+    "Detect": '<path d="M2 13h4l2.2-6 3.3 11 2.4-8 1.6 3H22"/>',
+    "Quick check": '<path d="M12.5 2 5 13h6l-1 9 8-12h-6l1-8z"/>',
+    "Route": '<path d="M5 3v6a6 6 0 0 0 6 6h8"/><path d="M5 21v-6"/><path d="m16 12 3 3-3 3"/>',
+    "Investigate": '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6M11 8v6"/>',
+    "Verdict": '<path d="M12 3v18"/><path d="M5 7h14"/><path d="m5 7-3 7a3 3 0 0 0 6 0z"/><path d="m19 7-3 7a3 3 0 0 0 6 0z"/>',
+    "Act": '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+}
+
+def flow_route(ev, gate):
+    """(route, reason sentence) for the Route stop. A stored record keeps the pipeline's route; the reason is only given when this
+    round's rule reproduces it (the pipeline may have run an earlier round with another cut-off)."""
+    try:
+        state = json.loads(ev.state_json or "{}")
+    except Exception:
+        state = {}
+    side = getattr(ev, "breach_side", None) or (state.get("reading") or {}).get("breach_side")
+    regulated = getattr(ev, "regulated", None)
+    if regulated is None:
+        regulated = bool((state.get("station") or {}).get("regulated"))
+    route, code, top = route_with_reason(ev.rule, side, regulated, gate)
+    if ev.route in ("AUTO_RESOLVE", "INVESTIGATE") and route != ev.route:
+        return ev.route, "Routed by the pipeline's own round of rules."
+    label = VERDICT_WORD.get((gate or {}).get("label"), "")
+    return route, ROUTE_REASON[code].format(top=f"{pct(top)}%" if top is not None else "–", thr=f"{pct(AUTO_RESOLVE_THRESHOLD)}%",
+                                             rule=RULE_WORD.get(ev.rule, ev.rule), label=label)
+
+def flow_actions_html(ev, pending, call):
+    acts = sorted(ev.actions, key=lambda x: ACTION_ORDER.index(x) if x in ACTION_ORDER else 9) or ["LOG"]
+    out = ""
+    for a in acts:
+        if a == "PAGE" and pending is not None and pending["deadline"] - time.time() > 0:
+            remaining = max(0, int(round(pending["deadline"] - time.time())))
+            shown = min(remaining, ss.countdown_s)
+            deg = int(360 * (1 - shown / max(ss.countdown_s, 1)))
+            out += (f'<div class="fact call"><div class="ring" style="background:conic-gradient(#d03b3b {deg}deg,#efeeea 0)"><span>{shown}</span></div>'
+                    f'<div><b>Calling on-call officer</b><span>{"Real" if ss.real_calls else "Simulated"} call when the ring closes</span></div></div>')
+        elif a == "PAGE":
+            status = (call or {}).get("status")
+            label = {"CALLING": "Dialling…", "DONE": "Call placed", "FAILED": "Call failed", "SIMULATED": "Call simulated",
+                     "CANCELLED": "Call cancelled"}.get(status, "Phone call")
+            out += f'<div class="fact call">{ICON["PAGE"]}<div><b>{label}</b><span>On-call duty officer</span></div></div>'
         else:
-            if ev.candidate_id not in ss.calls:
-                if ss.real_calls:
-                    contacts = [os.environ["CONTACT_1"]] + ([os.environ["CONTACT_2"]] if escalate and os.environ.get("CONTACT_2") else [])
-                    place_call(pending["alert"], contacts, escalate, ev.candidate_id)
-                else:
-                    ss.calls[ev.candidate_id] = {"status": "SIMULATED", "result": "simulated call (real calls off)"}
-                st.rerun()
-            if ss.calls[ev.candidate_id]["status"] != "CALLING" and b3.button("Dismiss", width="stretch", key="dismiss_call"):
-                ss.pending_call = None
-                st.rerun()
+            out += f'<div class="fact">{ICON.get(a, ICON["LOG"])}<div><b>{ACTION_TITLE.get(a, a)}</b><span>{ACTION_SUB.get(a, "")}</span></div></div>'
+    return out
+
+def flow_html(ev, stage, gate_live=None, gate_ms=None, llm=None, llm_ms=None, play=False, pending=None, call=None):
+    """The process flow. stage: 'gate_running' | 'llm_running' | 'done'. gate_live/llm: live results (None = stored values).
+    play: replay reveal (timed CSS); otherwise the stops show exactly how far the live run has got."""
+    gate = gate_live or (None if stage == "gate_running" else gate_from_probs(ev.p_fault, ev.p_operational, ev.p_real_event))
+    route_known = stage != "gate_running" and ev.route != "PENDING"
+    route, reason = flow_route(ev, gate) if route_known else (None, "")
+    closer = route == "INVESTIGATE"
+    status = {"gate_running": ["done", "active", "todo", "todo", "todo", "todo"],
+              "llm_running": ["done", "done", "done", "active", "todo", "todo"],
+              "done": ["done", "done", "done", "done" if closer else "skip", "done", "done"]}[stage]
+    delay = [0, .5, 1.2, 1.7, 3.3, 3.8] if closer else [0, .5, 1.2, 0, 1.8, 2.3]       # replay reveal timeline (s)
+    vc = VERDICT_COLOR.get(ev.verdict, MUTED)
+    unit = "m³/s" if ev.signal == "DISCHARGE" else "m"
+    rule = RULE_WORD.get(ev.rule, ev.rule)
+    dynamic = getattr(ev, "dynamic", False)
+
+    # cards
+    was = (f" · was {ev.value - ev.delta_6h:.3g} six hours earlier" if ev.delta_6h is not None and ev.value is not None and abs(ev.delta_6h) > 1e-9 else "")
+    detect = (f'<div class="big">{rule[0].upper() + rule[1:]}</div><div class="ln"><b>{ev.value:.3g} {unit}</b>{was}</div>'
+              f'<div class="meta">{nice_name(ev.station_name)} · {("scenario · " if dynamic else "") + fmt(ev.visible_at)}</div>')
+    if gate:
+        thr = pct(AUTO_RESOLVE_THRESHOLD)
+        bars = "".join(f'<div class="pb"><span>{lab}</span><div class="tr"><div class="fl" style="width:{pct(p)}%;background:{col}"></div>'
+                       f'<i style="left:{thr}%"></i></div><b>{pct(p)}%</b></div>'
+                       for lab, p, col in (("Bad sensor", gate["p_fault"], VERDICT_COLOR["SENSOR_FAULT"]),
+                                           ("Dam change", gate["p_operational"], VERDICT_COLOR["OPERATIONAL_CHANGE"]),
+                                           ("Real event", gate["p_real_event"], VERDICT_COLOR["NATURAL_EVENT"])))
+        quick = bars + f'<div class="meta">Tick = {thr}% cut-off to settle without the LLM</div>'
+    else:
+        quick = '<div class="wait">Asking ai_decide…</div>' if stage == "gate_running" else '<div class="meta">No quick-check result</div>'
+    if route_known:
+        routes = (f'<div class="rt {"on" if not closer else "off"}">Auto-resolve</div><div class="rt {"on" if closer else "off"}">Investigate</div>'
+                  f'<div class="meta why2">{reason}</div>')
+    else:
+        routes = '<div class="rt off">Auto-resolve</div><div class="rt off">Investigate</div><div class="meta">Waiting for the quick check</div>'
+    conf = (llm or {}).get("confidence", ev.confidence) if closer else None
+    used_rain = '"RAIN"' in str((llm or {}).get("evidence") or ev.evidence or "")
+    if status[3] == "skip":
+        invest = '<div class="meta">Skipped — the quick check was sure enough.</div>'
+    elif status[3] == "active":
+        invest = '<div class="wait">Reading the evidence…</div>'
+    elif status[3] == "done":
+        invest = (f'<div class="ln">Weighed gauge history, physical limits, neighbouring gauges{", rainfall" if used_rain else ""}.</div>'
+                  + (f'<div class="big sm">{pct(conf)}% sure</div>' if conf is not None else "")
+                  + ('<div class="think2"><div class="dots"><span></span><span></span><span></span></div>Reading the evidence…</div>' if play else ""))
+    else:
+        invest = '<div class="meta">Only if the quick check isn\'t sure.</div>'
+    sev = SEVERITY_WORD.get(ev.severity, "")
+    verdict = ((f'<div class="pill" style="background:{vc}">{VERDICT_WORD.get(ev.verdict, ev.verdict)}</div>'
+                f'<div class="ln">{sev.capitalize() if sev else "No danger flagged"}</div>'
+                f'<div class="meta">Decided by {"the LLM" if ev.decided_by == "AGENT_SQL" else "the quick check"}</div>')
+               if status[4] == "done" else '<div class="meta">—</div>')
+    act = flow_actions_html(ev, pending, call) if status[5] == "done" else '<div class="meta">—</div>'
+    ms = lambda v: f"{v:.0f} ms" if v < 1000 else f"{v / 1000:.1f} s"
+    lat = [("live", ""), (ms(gate_ms) if gate_ms is not None else "~0.3 s", ""), ("", ""),
+           (f"{llm_ms / 1000:.1f} s" if llm_ms is not None else ("~3 s" if closer else ""), ""), ("", ""), ("", "")]
+    chips = ["rule-based detector", "ai_decide", f"cut-off {pct(AUTO_RESOLVE_THRESHOLD)}%", "ai_query · LLM", "", ""]
+    bodies = [detect, quick, routes, invest, verdict, act]
+
+    nodes, cards = "", ""
+    for i, name in enumerate(FLOW_STAGES):
+        on_path = not (i == 3 and status[3] == "skip")
+        seg_in = "" if i == 0 else ("on" if status[i] in ("done", "active") and on_path else "dim" if not on_path else "")
+        seg_out = "" if i == 5 else ("on" if status[i + 1] in ("done", "active") and not (i + 1 == 3 and status[3] == "skip") and on_path else
+                                     "dim" if (i + 1 == 3 and status[3] == "skip") or not on_path else "")
+        d = f"--d:{delay[i]}s"
+        nodes += (f'<div class="nd {status[i]}" style="{d}">'
+                  + (f'<span class="sg l {seg_in}" style="--d:{max(0, delay[i] - .35)}s"></span>' if i else "")
+                  + (f'<span class="sg r {seg_out}" style="--d:{max(0, delay[i + 1] - .35) if i < 5 else 0}s"></span>' if i < 5 else "")
+                  + f'<span class="knob"><svg viewBox="0 0 24 24">{FLOW_ICON[name]}</svg></span></div>')
+        cards += (f'<div class="cd {status[i]}" style="{d}"><div class="hd"><span class="nm">{i + 1}. {name}</span><span class="lt">{lat[i][0]}</span></div>'
+                  + (f'<span class="chip2">{chips[i]}</span>' if chips[i] else "") + f'<div class="bd">{bodies[i]}</div></div>')
+    arc_cls = "on" if route_known and not closer and status[4] == "done" else "dim" if route_known and closer else ""
+    arc = (f'<div class="arc {arc_cls}" style="--d:{delay[2] + .2}s"><svg viewBox="0 0 100 40" preserveAspectRatio="none">'
+           '<path pathLength="100" vector-effect="non-scaling-stroke" d="M0 38 C0 8 6 6 18 6 L82 6 C94 6 100 8 100 38"/></svg><span>clear-cut</span></div>')
+
+    # reasoning strip
+    strip = ""
+    if stage == "done":
+        why = humanize(((llm or {}).get("rationale") if llm else None) or ev.rationale or "")
+        facts = ([humanize(e.get("fact", "")) for e in ((llm or {}).get("evidence") or []) if isinstance(e, dict) and e.get("fact")][:4] if llm else
+                 [humanize(e.get("fact", "")) for e in _safe_json(ev.evidence) if e.get("fact")][:4])
+        src = ("AI reasoning · " + ("generated live by" if llm else "from") + " the LLM (ai_query)") if ev.decided_by == "AGENT_SQL" else "Decision note · from the quick check (ai_decide)"
+        live_note = " · models re-run live on the stored input; timings include the round trip to the warehouse" if (gate_live or llm) else ""
+        strip = (f'<div class="strip" style="--d:{delay[4] + .3}s;border-left-color:{vc}"><div class="sh">{src}{live_note}</div>'
+                 f'<div class="tx2">{why}</div><div class="chips2">{"".join(f"<span>{f}</span>" for f in facts)}</div></div>')
+    return (f'<div class="pf{" play" if play else ""}{" quick" if not closer else ""}"><div class="trk">{nodes}{arc}</div>'
+            f'<div class="cds">{cards}</div>{strip}</div>')
+
+def run_live(ev, paint):
+    """Re-run the two models on this record once (live mode, or always for a scenario), painting each stop as its result arrives.
+    Caches the results in ss.live_results; for a scenario also decides route, verdict and actions and may start a call."""
+    dynamic = getattr(ev, "dynamic", False)
+    closer = ev.route == "INVESTIGATE"
+    paint("gate_running")
+    try:
+        gate, gate_ms = run_gate_live(ev.state_json)
+    except Exception as e:
+        gate, gate_ms = None, None
+        st.caption(f"Live ai_decide unavailable ({str(e)[:90]}); showing the stored result.")
+    if dynamic:                                         # a scenario: the route is decided now, from the live gate
+        ev.route = decide_route(ev, gate); closer = ev.route == "INVESTIGATE"
+    llm, llm_ms = None, None
+    if closer:
+        paint("llm_running", gate, gate_ms)
+        try:
+            llm, llm_ms = run_llm_live(ev.agent_state or ev.state_json)
+        except Exception as e:
+            st.caption(f"Live ai_query unavailable ({str(e)[:90]}); showing the stored reasoning.")
+    if dynamic:                                         # verdict, severity and actions from the same rules as the pipeline
+        finalize(ev, gate, llm)
+        if "PAGE" in ev.actions and ss.pending_call is None:
+            on_page(ev); ss.paged.add(ev.candidate_id)
+    ss.live_results[ev.candidate_id] = {"gate": gate, "gate_ms": gate_ms, "llm": llm, "llm_ms": llm_ms}
+    pc = ss.pending_call
+    if pc is not None and pc["candidate_id"] == ev.candidate_id:   # the countdown starts only once the decision is on screen
+        pc["deadline"] = time.time() + ss.countdown_s
+    ss.hero_shown_at = 0                                # nothing left to reveal; reruns may proceed
+    return ss.live_results[ev.candidate_id]
+
+def call_controls(ev, pending):
+    """Cancel / Call now during the countdown; places (or simulates) the call when it reaches zero. Streamlit buttons can't live in the HTML."""
+    if pending is None:
+        return
+    remaining = int(round(pending["deadline"] - time.time()))
+    b1, b2, b3 = st.columns([4, 1, 1])
+    if remaining > 0:
+        mode = "A real call will be placed" if ss.real_calls else "Simulated: no real call will be placed"
+        b1.caption(f"The system has decided to call. {mode} in {remaining} s unless someone cancels.")
+        if b2.button("Cancel", width="stretch", key="cancel_call"):
+            ss.calls[ev.candidate_id] = {"status": "CANCELLED", "result": "cancelled by operator"}
+            ss.pending_call = None
+            st.rerun()
+        if b3.button("Call now", width="stretch", type="primary", key="call_now"):
+            pending["deadline"] = time.time()
+            st.rerun()
+    else:
+        if ev.candidate_id not in ss.calls:
+            if ss.real_calls:
+                contacts = [os.environ["CONTACT_1"]] + ([os.environ["CONTACT_2"]] if escalate and os.environ.get("CONTACT_2") else [])
+                place_call(pending["alert"], contacts, escalate, ev.candidate_id)
+            else:
+                ss.calls[ev.candidate_id] = {"status": "SIMULATED", "result": "simulated call (real calls off)"}
+            st.rerun()
+        if ss.calls[ev.candidate_id]["status"] != "CALLING" and b3.button("Dismiss", width="stretch", key="dismiss_call"):
+            ss.pending_call = None
+            st.rerun()
 
 # ----------------------------------------------------------------------------- state
 events, stations, cases = derive(load_events()), load_stations(), load_cases()
@@ -864,6 +1080,50 @@ with map_col:
                         for r in in_system.itertuples()], current, key="system_map", height=MAP_H)
 with stats_col:
     stats_col.markdown(summary_cards(seen, MAP_H + 2), unsafe_allow_html=True)
+
+# ----------------------------------------------------------------------------- process flow (new): how the current record is being handled
+flow_ev, fresh = None, False                    # the record on show, and whether it just arrived (plays its reveal / runs live models)
+if scenario is not None:
+    flow_ev, fresh = scenario, ss.scenario_fresh
+elif latest is not None:
+    flow_ev = latest
+    fresh = settled and ss.get("last_hero") != latest.candidate_id
+    if settled:
+        ss.last_hero = latest.candidate_id
+    if fresh:
+        ss.hero_shown_at = time.time()          # the reveal runs ~5 s; reruns are held off until it has played
+
+h1, h2 = st.columns([5, 1], vertical_alignment="bottom")
+mode_txt = "scenario · models run live" if scenario is not None else ("models re-run live" if ss.live_mode else "stored results")
+h1.markdown(f'<div class="sec-head">Latest record<span>{mode_txt}</span></div>', unsafe_allow_html=True)
+if scenario is not None and h2.button("← Back to replay", key="back_to_replay", width="stretch"):
+    nav(); ss.scenario_ev = None; st.rerun()
+if flow_ev is None:
+    st.markdown(f'<div class="idle"><div class="dot"></div><div><b>Watching {len(lanes)} gauge{"s" if len(lanes) != 1 else ""}</b> in '
+                f'{SYSTEM_LABEL.get(system, system)}. Nothing unusual so far. Press <b>next ▸▸</b> in the Dev Panel to move to the first odd reading.</div></div>',
+                unsafe_allow_html=True)
+else:
+    flow_slot = st.empty()
+    def flow_pending():
+        pc = ss.pending_call
+        return pc if (pc and pc["candidate_id"] == flow_ev.candidate_id) else None
+    def paint_flow(stage, gate=None, gate_ms=None, llm=None, llm_ms=None, play=False):
+        flow_slot.markdown(flow_html(flow_ev, stage, gate, gate_ms, llm, llm_ms, play=play, pending=flow_pending(),
+                                     call=ss.calls.get(flow_ev.candidate_id)), unsafe_allow_html=True)
+    cached = ss.live_results.get(flow_ev.candidate_id)
+    if (ss.live_mode or getattr(flow_ev, "dynamic", False)) and fresh and cached is None:
+        cached = run_live(flow_ev, paint_flow)  # the only place the models are re-run
+    if cached is not None:
+        paint_flow("done", cached["gate"], cached["gate_ms"], cached["llm"], cached["llm_ms"])
+    else:
+        paint_flow("done", play=fresh)          # stored results, with the timed reveal when the record just arrived
+    call_controls(flow_ev, flow_pending())
+    if scenario is not None:
+        st.caption(f"Route cut-off {AUTO_RESOLVE_THRESHOLD:.2f} (round R2) · neighbours count as moving above {int(NEIGHBOUR_MOVE_PCT*100)} % · "
+                   f"model {LLM_MODEL}. The scenario is not written to the tables.")
+    elif not settled:
+        st.caption("Moving… the live check starts when the playhead rests.")
+
 st.markdown('<div class="legacy-sep">Legacy dashboard — being phased out</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------------- header
@@ -877,25 +1137,11 @@ m[2].metric("Sent to a technician", int(has(seen, "TICKET").sum()), help="Bad-se
 m[3].metric("Calls to the on-call person", int(seen[has(seen, "PAGE")].event_key.nunique()), help="One call per gauge per event")
 
 # ----------------------------------------------------------------------------- live decision (the highlight)
-if scenario is not None:
-    # a scenario takes the card's place until "Back to replay" or any playback control
-    if st.button("← Back to replay", key="back_to_replay"):
-        nav(); ss.scenario_ev = None; st.rerun()
+if flow_ev is not None:                         # same record as the process flow above; display only
     pc = ss.pending_call
-    hero(scenario, ss.scenario_fresh, pc if (pc and pc["candidate_id"] == scenario.candidate_id) else None, ss.calls.get(scenario.candidate_id))
-    ss.scenario_fresh = False
-    st.caption(f"Route cut-off {AUTO_RESOLVE_THRESHOLD:.2f} (round R2) · neighbours count as moving above {int(NEIGHBOUR_MOVE_PCT*100)} % · "
-               f"model {LLM_MODEL}. The scenario is not written to the tables.")
-elif latest is not None:
-    fresh = settled and ss.get("last_hero") != latest.candidate_id
-    if settled:
-        ss.last_hero = latest.candidate_id
-    if fresh:
-        ss.hero_shown_at = time.time()          # the reveal runs ~5 s; reruns are held off until it has played
-    pc = ss.pending_call
-    hero(latest, fresh, pc if (pc and pc["candidate_id"] == latest.candidate_id) else None, ss.calls.get(latest.candidate_id))
-    if not settled:
-        st.caption("Moving… the live check starts when the playhead rests.")
+    hero(flow_ev, fresh, pc if (pc and pc["candidate_id"] == flow_ev.candidate_id) else None, ss.calls.get(flow_ev.candidate_id))
+    if scenario is not None:
+        ss.scenario_fresh = False
 else:
     # nothing seen yet: quiet sentry state
     st.markdown(f'<div class="idle"><div class="dot"></div><div><b>Watching {len(lanes)} gauge{"s" if len(lanes) != 1 else ""}</b> in '

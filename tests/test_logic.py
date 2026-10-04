@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 
 import logic
-from logic import (_ids, _nearby, _p99, build_custom_event, decide_route, derive, finalize, fmt, humanize, infer_rule,
-                   neighbour_ids, neighbour_pcts, nice_name, pct, scenario_event)
+from logic import (_ids, _nearby, _p99, build_custom_event, decide_route, derive, finalize, fmt, gate_from_probs, humanize, infer_rule,
+                   neighbour_ids, route_with_reason, neighbour_pcts, nice_name, pct, scenario_event)
 from scenarios import SCENARIOS
 
 
@@ -220,3 +220,31 @@ def test_scenario_event_uses_defaults(station):
 def test_every_scenario_builds(station, sc):
     ev = scenario_event(sc, station | {"station_id": sc["gauge"]}, ["05BH005", "05BM002", "05BJ010"])
     assert ev.station_id == sc["gauge"] and ev.rule in ("GAP", "PHYSICAL_BREACH", "SPIKE", "FLATLINE", "RAPID_RISE", "STEP")
+
+
+# ----------------------------------------------------------------------------- route reasons (shown in the process flow)
+@pytest.mark.parametrize("rule, side, regulated, g, expected", [
+    ("SPIKE", None, False, None, ("INVESTIGATE", "NO_GATE")),
+    ("RAPID_RISE", None, False, gate("NATURAL_EVENT", 0.99), ("INVESTIGATE", "ALWAYS_RISE")),
+    ("PHYSICAL_BREACH", "HIGH", False, gate("SENSOR_FAULT", 0.99), ("INVESTIGATE", "ALWAYS_HIGH_BREACH")),
+    ("SPIKE", None, False, gate("SENSOR_FAULT", 0.6), ("INVESTIGATE", "BELOW_CUTOFF")),
+    ("SPIKE", None, False, gate("SENSOR_FAULT", 0.9), ("AUTO_RESOLVE", "FAULT_FITS")),
+    ("PHYSICAL_BREACH", "LOW", False, gate("SENSOR_FAULT", 0.9), ("AUTO_RESOLVE", "FAULT_FITS")),
+    ("STEP", None, True, gate("OPERATIONAL_CHANGE", 0.9), ("AUTO_RESOLVE", "DAM_FITS")),
+    ("STEP", None, False, gate("OPERATIONAL_CHANGE", 0.9), ("INVESTIGATE", "LABEL_MISMATCH")),
+    ("SPIKE", None, False, gate("NATURAL_EVENT", 0.9), ("INVESTIGATE", "LABEL_MISMATCH")),
+])
+def test_route_with_reason(rule, side, regulated, g, expected):
+    assert route_with_reason(rule, side, regulated, g)[:2] == expected
+
+
+def test_route_reason_agrees_with_decide_route(station):
+    for ev, g in [(event(station, spike=True), gate("SENSOR_FAULT", 0.9)), (event(station, value=300.0, prev6=100.0), gate("NATURAL_EVENT", 0.9)),
+                  (event(station, value=120.0), gate("OPERATIONAL_CHANGE", 0.9)), (event(station), None)]:
+        assert decide_route(ev, g) == route_with_reason(ev.rule, ev.breach_side, ev.regulated, g)[0]
+
+
+def test_gate_from_probs():
+    assert gate_from_probs(0.1, 0.7, 0.2)["label"] == "OPERATIONAL_CHANGE"
+    assert gate_from_probs(None, None, None) is None
+    assert gate_from_probs(float("nan"), 0.3, None)["label"] == "OPERATIONAL_CHANGE"

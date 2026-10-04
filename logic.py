@@ -163,16 +163,28 @@ def scenario_event(sc: dict, stn: dict, known_ids):
     ev.scenario = sc["name"]
     return ev
 
+def route_with_reason(rule, breach_side, regulated, gate):
+    """Mirror of the SQL routing with this round's threshold, plus why: (route, reason_code, top_probability).
+    reason codes: NO_GATE, ALWAYS_RISE, ALWAYS_HIGH_BREACH, BELOW_CUTOFF, FAULT_FITS, DAM_FITS, LABEL_MISMATCH."""
+    if gate is None: return "INVESTIGATE", "NO_GATE", None
+    top = max([x for x in (gate["p_fault"], gate["p_operational"], gate["p_real_event"]) if x is not None] or [0])
+    if rule == "RAPID_RISE": return "INVESTIGATE", "ALWAYS_RISE", top
+    if rule == "PHYSICAL_BREACH" and (breach_side or "HIGH") != "LOW": return "INVESTIGATE", "ALWAYS_HIGH_BREACH", top
+    if top < AUTO_RESOLVE_THRESHOLD: return "INVESTIGATE", "BELOW_CUTOFF", top
+    if rule in ("PHYSICAL_BREACH", "SPIKE", "FLATLINE", "GAP") and gate["label"] == "SENSOR_FAULT": return "AUTO_RESOLVE", "FAULT_FITS", top
+    if rule == "STEP" and regulated and gate["label"] == "OPERATIONAL_CHANGE": return "AUTO_RESOLVE", "DAM_FITS", top
+    return "INVESTIGATE", "LABEL_MISMATCH", top
+
 def decide_route(ev, gate):
     """Mirror of the SQL routing with this round's threshold."""
-    if gate is None: return "INVESTIGATE"
-    if ev.rule == "RAPID_RISE": return "INVESTIGATE"
-    if ev.rule == "PHYSICAL_BREACH" and (ev.breach_side or "HIGH") != "LOW": return "INVESTIGATE"
-    top = max([x for x in (gate["p_fault"], gate["p_operational"], gate["p_real_event"]) if x is not None] or [0])
-    if top < AUTO_RESOLVE_THRESHOLD: return "INVESTIGATE"
-    if ev.rule in ("PHYSICAL_BREACH", "SPIKE", "FLATLINE", "GAP") and gate["label"] == "SENSOR_FAULT": return "AUTO_RESOLVE"
-    if ev.rule == "STEP" and ev.regulated and gate["label"] == "OPERATIONAL_CHANGE": return "AUTO_RESOLVE"
-    return "INVESTIGATE"
+    return route_with_reason(ev.rule, ev.breach_side, ev.regulated, gate)[0]
+
+def gate_from_probs(p_fault, p_operational, p_real_event):
+    """A stored event's quick-check result in the live gate's shape (label = the most likely answer)."""
+    probs = {"SENSOR_FAULT": p_fault, "OPERATIONAL_CHANGE": p_operational, "NATURAL_EVENT": p_real_event}
+    known = {k: v for k, v in probs.items() if v is not None and v == v}
+    if not known: return None
+    return {"p_fault": p_fault, "p_operational": p_operational, "p_real_event": p_real_event, "label": max(known, key=known.get)}
 
 def finalize(ev, gate, llm):
     """Mirror of the SQL verdict overrides, severity rules and routing table."""
