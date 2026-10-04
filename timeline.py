@@ -73,7 +73,11 @@ ACTION_SYMBOL = {"PAGE": "star", "QUARANTINE": "x", "TICKET": "square", "WATCH":
 
 st.set_page_config(page_title="RiverSentinel", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"]{padding:3.25rem 2rem 2rem 2rem;max-width:none}   /* full width; top clears the toolbar */
+[data-testid="stMainBlockContainer"]{padding:1.25rem 2rem 2rem 2rem;max-width:none}   /* full width */
+/* no Streamlit toolbar (Deploy, menu, running status); the header stays only for the collapsed sidebar's expand button */
+[data-testid="stHeader"]{background:transparent;height:0;min-height:0;pointer-events:none}
+[data-testid="stAppDeployButton"], [data-testid="stMainMenu"], [data-testid="stStatusWidget"], [data-testid="stDecoration"]{display:none !important}
+[data-testid="stExpandSidebarButton"]{pointer-events:auto;transform:translateY(10px)}
 .card{border:1px solid #e1e0d9;border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fcfcfb}
 .card h4{margin:0 0 6px 0;font-size:1.02rem}
 .card .row{margin:3px 0;color:#0b0b0b}
@@ -221,7 +225,7 @@ st.markdown("""<style>
 .pf .rt::before{content:"";width:9px;height:9px;border-radius:50%;border:2px solid currentColor}
 .pf .rt.on{border-color:#0b0b0b;color:#0b0b0b;font-weight:600} .pf .rt.on::before{background:#0b0b0b}
 .pf .why2{color:#52514e}
-.pf .pill{display:inline-block;padding:4px 12px;border-radius:999px;color:#fff;font-weight:650;font-size:.92rem;margin:4px 0 4px}
+.pf .pill{display:inline-block;align-self:flex-start;padding:4px 10px;border-radius:8px;color:#fff;font-weight:650;font-size:.92rem;line-height:1.3;margin:4px 0 4px}   /* not a capsule: long verdicts wrap */
 .pf .fact{display:flex;align-items:center;gap:8px;border:1px solid #e1e0d9;border-radius:6px;padding:6px 8px;margin:4px 0}
 .pf .fact svg{width:20px;height:20px;flex:none}
 .pf .fact b{display:block;font-size:.8rem;line-height:1.2} .pf .fact span{display:block;font-size:.7rem;color:#898781;line-height:1.25}
@@ -254,7 +258,7 @@ st.markdown("""<style>
 div[data-testid="stDialog"]{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}   /* blur the app behind the modal */
 div[data-testid="stDialog"] [role="dialog"]{border:1px solid #e1e0d9;border-radius:8px}
 .mi-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#52514e;font-size:.9rem;margin-bottom:6px}
-.mi-head .pill{display:inline-block;padding:3px 12px;border-radius:999px;color:#fff;font-weight:650}
+.mi-head .pill{display:inline-block;padding:3px 10px;border-radius:8px;color:#fff;font-weight:650}
 .mi-sec{border:1px solid #e1e0d9;border-radius:8px;padding:10px 14px;margin:10px 0;background:#fff}
 .mi-h{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#0b0b0b;font-weight:650;margin-bottom:6px}
 .mi-h span{font-weight:400;text-transform:none;letter-spacing:0;color:#898781;margin-left:8px}
@@ -1131,7 +1135,7 @@ if cur_id is not None:
 st.markdown(f'<div class="dash-head"><div class="dash-title">{system}<span class="chev">›</span>{SYSTEM_NAME.get(system, system)} River System</div>'
             f'<div class="dash-brand"><div class="logo">River Sentinel</div><div class="clock">{fmt(T)} MDT</div></div></div>', unsafe_allow_html=True)
 MAP_H = 380                                          # map height; the summary cards fill the same height beside it
-map_col, stats_col = st.columns([3.2, 1], gap="medium")   # map column = map + a 240 px gutter for its station panels
+map_col, stats_col = st.columns([3.2, 1], gap="medium")   # the map fills its column; station panels overlay its right edge
 with map_col:
     in_sel = set(lanes.station_id)
     system_map(system, [{"id": r.station_id, "name": nice_name(r.name), "lat": float(r.lat), "lon": float(r.lon), "on": r.station_id in in_sel}

@@ -5,8 +5,8 @@ Main-dashboard system map: a fixed-view MapLibre map (loaded from a CDN) built w
   major roads and place names for orientation, and hillshade from the AWS Terrain Tiles (Terrarium DEM).
 - Stations: dark-grey dots (in the Dev Panel selection), light-grey dots (rest of the system). The current station is a
   crimson pulsing marker and its nearest neighbours (nearby_ids) are azure. Each gets a panel (badge, station id, name, sparkline of
-  recent flow) bolted onto the map's right edge in a reserved gutter: the selected panel is centred on its station, neighbours stack
-  above/below it without overlap, closest vertically nearest, each joined to its station by a dashed connector.
+  recent flow) inside the map's right edge, in a band the fit keeps clear of stations: the selected panel is centred on its station,
+  neighbours stack above/below it without overlap, closest vertically nearest, each joined to its station by a dashed connector.
 - The view fits the system's stations once and never recentres when the current station changes; it refits only when
   the system changes. Pan/zoom are disabled.
 
@@ -78,12 +78,12 @@ STYLE = {
     ],
 }
 
-GUTTER = 240          # px reserved right of the map for the bolted-on station panel (always reserved, so the map never resizes)
+GUTTER = 240          # px on the map's right kept clear of stations (fit padding) for the station panels, which sit inside the map
 
 _CSS = """
 :host{display:block}
 .wrap{position:relative}
-.rsmap{position:relative;border:1px solid #d9d9d5;border-radius:6px 0 0 6px;overflow:hidden;background:#efefed}
+.rsmap{position:relative;border:1px solid #d9d9d5;border-radius:6px;overflow:hidden;background:#efefed}
 .canvas{position:absolute;inset:0}
 .msg{position:absolute;inset:0;display:grid;place-items:center;color:#8b8b86;font:13px system-ui,sans-serif}
 .cur{position:relative;width:14px;height:14px}
@@ -95,9 +95,9 @@ _CSS = """
 svg.links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:3}
 svg.links path{fill:none;stroke-width:1;stroke-dasharray:3 3;opacity:.75;transition:d .35s ease}
 /* panels: bolted onto the map's right edge, stacked without overlap; notch at the station's height */
-.panel{position:absolute;top:0;background:#fff;border:1px solid #d0d0cc;border-left:3px solid var(--c);border-radius:0 4px 4px 0;
+.panel{position:absolute;top:0;background:rgba(255,255,255,.96);border:1px solid #d0d0cc;border-left:3px solid var(--c);border-radius:0 4px 4px 0;
        padding:6px 10px 7px;white-space:nowrap;font:12px/1.35 system-ui,sans-serif;color:#1d1d1b;box-shadow:2px 2px 8px rgba(0,0,0,.08);
-       transition:top .35s ease;max-width:calc(var(--gutter) - 4px);z-index:4}
+       transition:top .35s ease;max-width:calc(var(--gutter) - 16px);z-index:4}
 .panel::before{content:"";position:absolute;left:-9px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--c);transition:top .35s ease}
 .panel.nb{padding:4px 9px 5px;font-size:11.5px;line-height:1.3}
 .panel.nb .val{font-size:10.5px}
@@ -111,7 +111,7 @@ svg.links path{fill:none;stroke-width:1;stroke-dasharray:3 3;opacity:.75;transit
 """
 
 _JS = """
-const JS_URL = %s, STYLE = %s, PAD = 44, GAP = 6;
+const JS_URL = %s, STYLE = %s, PAD = 44, GAP = 6, EDGE = 8;   // EDGE: panels' inset from the map's top/right/bottom
 function loadLib() {                                   // one <script> for the whole page; MapLibre's UMD build sets window.maplibregl
   if (window.maplibregl) return Promise.resolve(window.maplibregl);
   if (!window.__rsMapLib) window.__rsMapLib = new Promise((ok, err) => {
@@ -185,37 +185,40 @@ function stack(list, H) {
   sel.top = selTop;
   nb.forEach((it) => { it.top = best.tops.get(it); });
 }
+function fitPad(data) { return { top: PAD, bottom: PAD, left: PAD, right: data.gutter + PAD }; }   // stations fill the map's left part
 function layout(s) {
-  const { map, data } = s, W = s.mapEl.clientWidth, H = s.mapEl.clientHeight, list = items(data), keep = new Set(list.map((i) => i.id));
+  const { map, data } = s, W = s.mapEl.clientWidth, H = s.mapEl.clientHeight - 2 * EDGE, list = items(data), keep = new Set(list.map((i) => i.id));
+  const X = W - data.gutter + EDGE;                    // panels' left edge, inside the map
   for (const [id, el] of s.panels) if (!keep.has(id)) { el.remove(); s.panels.delete(id); }
   for (const it of list) {
     let el = s.panels.get(it.id), fresh = !el;
     if (fresh) { el = document.createElement("div"); s.wrap.appendChild(el); s.panels.set(it.id, el); }
     el.className = "panel" + (it.role === "nb" ? " nb" : "");   // neighbours are compact so four panels fit the map's height
-    el.style.left = (W + 1) + "px"; el.style.setProperty("--c", it.color); el.innerHTML = panelHtml(it);
-    Object.assign(it, { el, fresh, h: el.offsetHeight, ...map.project([it.lon, it.lat]) });
+    el.style.left = X + "px"; el.style.setProperty("--c", it.color); el.innerHTML = panelHtml(it);
+    const p = map.project([it.lon, it.lat]);
+    Object.assign(it, { el, fresh, h: el.offsetHeight, x: p.x, y: p.y - EDGE });   // y in the panel band's coordinates
   }
-  let bottom = H, paths = "";
+  let bottom = s.mapEl.clientHeight, paths = "";
   if (list.length) {
     stack(list, H);
     const order = [...list].sort((a, b) => a.top - b.top);
     for (const it of list) {
-      const bend = W - 10 - 8 * order.indexOf(it);   // staggered so displaced connectors don't merge at the edge
-      const notch = Math.min(Math.max(it.y - it.top, 8), it.h - 8);
-      if (it.fresh) { it.el.style.transition = "none"; it.el.style.top = it.top + "px"; void it.el.offsetHeight; it.el.style.transition = ""; }
-      else it.el.style.top = it.top + "px";
+      const bend = X - 22 - 8 * order.indexOf(it);   // staggered so displaced connectors don't merge before the panels
+      const notch = Math.min(Math.max(it.y - it.top, 8), it.h - 8), top = it.top + EDGE;
+      if (it.fresh) { it.el.style.transition = "none"; it.el.style.top = top + "px"; void it.el.offsetHeight; it.el.style.transition = ""; }
+      else it.el.style.top = top + "px";
       it.el.style.setProperty("--notch", notch + "px");
-      const r = it.role === "sel" ? 12 : 8, ny = it.top + notch;
-      paths += `<path stroke="${it.color}" d="M ${(it.x + r).toFixed(1)} ${it.y.toFixed(1)} H ${bend} L ${W + 1} ${ny.toFixed(1)}"/>`;
-      bottom = Math.max(bottom, it.top + it.h);
+      const r = it.role === "sel" ? 12 : 8, ny = top + notch, sy = it.y + EDGE;
+      paths += `<path stroke="${it.color}" d="M ${(it.x + r).toFixed(1)} ${sy.toFixed(1)} H ${Math.max(bend, it.x + r)} L ${X - 9} ${ny.toFixed(1)}"/>`;
+      bottom = Math.max(bottom, top + it.h);
     }
   }
-  s.links.setAttribute("width", W + 2); s.links.setAttribute("height", bottom); s.links.innerHTML = paths;
+  s.links.setAttribute("width", W); s.links.setAttribute("height", bottom); s.links.innerHTML = paths;
   s.wrap.style.minHeight = (bottom + 2) + "px";       // panels pushed past the map stay inside the component
 }
 function apply(s) {
   const { map, data, lib } = s;
-  if (s.system !== data.system) { map.fitBounds(data.bounds, { padding: PAD, duration: 0 }); s.system = data.system; }   // the only recentre
+  if (s.system !== data.system) { map.fitBounds(data.bounds, { padding: fitPad(data), duration: 0 }); s.system = data.system; }   // the only recentre
   const c = data.current;
   map.getSource("stations").setData(fc(data.stations, new Set(c ? (c.neighbours || []).map((n) => n.id) : [])));
   s.wrap.style.setProperty("--cur", data.colors.current);
@@ -234,7 +237,7 @@ export default function (component) {
   const { data, parentElement } = component;
   const wrap = parentElement.querySelector(".wrap"), mapEl = wrap.querySelector(".rsmap");
   mapEl.style.height = data.height + "px";
-  mapEl.style.width = `calc(100%% - ${data.gutter}px)`;
+  mapEl.style.width = "100%%";
   wrap.style.setProperty("--gutter", data.gutter + "px");
   let s = parentElement.__rsmap;
   if (!s) {
@@ -242,7 +245,7 @@ export default function (component) {
     loadLib().then((lib) => {
       s.lib = lib;
       const map = new lib.Map({ container: mapEl.querySelector(".canvas"), style: STYLE, bounds: s.data.bounds,
-                                fitBoundsOptions: { padding: PAD }, interactive: false, attributionControl: { compact: true } });
+                                fitBoundsOptions: { padding: fitPad(s.data) }, interactive: false, attributionControl: { compact: true } });
       s.map = map; s.system = s.data.system;
       map.on("resize", () => s.ready && layout(s));
       map.on("load", () => {
