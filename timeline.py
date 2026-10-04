@@ -176,10 +176,10 @@ st.markdown("""<style>
 .sec-head{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#52514e;font-weight:600;margin:26px 0 2px 0}
 .sec-head span{margin-left:10px;font-weight:400;letter-spacing:.04em;text-transform:none;color:#898781}
 .pf{--on:#0b0b0b;--off:#e1e0d9;margin-top:6px}
-.pf .trk{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:14px;height:62px}
+.pf .trk{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:16px;height:62px}   /* 16px = st.columns(gap='small'), so the button row lines up */
 .pf .nd{position:relative;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px}
 .pf .sg{position:absolute;bottom:20px;height:3px;background:var(--off);border-radius:2px}
-.pf .sg.l{left:-7px;right:50%} .pf .sg.r{left:50%;right:-7px}
+.pf .sg.l{left:-8px;right:50%} .pf .sg.r{left:50%;right:-8px}
 .pf .sg.on{background:var(--on)} .pf .sg.dim{background:repeating-linear-gradient(90deg,#d6d5ce 0 5px,transparent 5px 9px)}
 .pf .knob{position:relative;z-index:1;width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--off);display:grid;place-items:center;color:#b5b4ab}
 .pf .knob svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
@@ -188,15 +188,17 @@ st.markdown("""<style>
 .pf .nd.skip .knob{border-style:dashed;color:#c3c2b7;background:#fafaf8}
 @keyframes ndpulse{0%,100%{box-shadow:0 0 0 0 rgba(11,11,11,.25)} 50%{box-shadow:0 0 0 8px rgba(11,11,11,0)}}
 /* the fork: a "clear-cut" bypass from Route over Investigate to Verdict */
-.pf .arc{position:absolute;top:2px;height:38px;left:calc((100% - 70px) / 6 * 2.5 + 14px * 2);width:calc((100% - 70px) / 6 * 2 + 14px * 2);pointer-events:none}
+.pf .arc{position:absolute;top:2px;height:38px;left:calc((100% - 80px) / 6 * 2.5 + 16px * 2);width:calc((100% - 80px) / 6 * 2 + 16px * 2);pointer-events:none}
 .pf .arc svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .pf .arc path{fill:none;stroke:var(--off);stroke-width:3;stroke-linecap:round}
 .pf .arc.on path{stroke:var(--on)} .pf .arc.dim path{stroke:#d6d5ce;stroke-dasharray:5 4}
 .pf .arc span{position:absolute;left:50%;top:-4px;transform:translateX(-50%);background:#fff;padding:0 6px;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:#898781}
 .pf .arc.on span{color:var(--on);font-weight:600}
 /* stop cards */
-.pf .cds{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:6px}
-.pf .cd{position:relative;border:1px solid #e1e0d9;border-radius:8px;background:#fff;padding:10px 12px 12px;min-height:178px;min-width:0}
+.pf .cds{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-top:6px}
+.pf .cd{position:relative;display:flex;flex-direction:column;border:1px solid #e1e0d9;border-radius:8px;background:#fff;padding:10px 12px 62px;min-height:216px;min-width:0}   /* bottom: room for lifted buttons */
+.pf .cd .bd{flex:1;display:flex;flex-direction:column}
+.pf .fact.anchor{margin-top:auto}   /* the call tile sits right above its Cancel / Call now (or Dismiss) buttons */
 .pf .cd.done{border-color:#cfcec6} .pf .cd.active{border-color:var(--on);box-shadow:0 0 0 3px rgba(11,11,11,.06)}
 .pf .cd.todo{background:#fbfbf9} .pf .cd.skip{background:#fbfbf9;border-style:dashed}
 .pf .cd .hd{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
@@ -239,6 +241,30 @@ st.markdown("""<style>
 .pf.play .strip{opacity:0;animation:appear .5s ease-out var(--d) forwards}
 .pf.play .nd.done .knob{animation:ndpop .45s ease-out var(--d) both}
 @keyframes ndpop{0%{transform:scale(.6)} 70%{transform:scale(1.12)} 100%{transform:scale(1)}}
+
+/* buttons lifted into the bottom of the Verdict / Act cards (cards reserve the space) */
+[class*="st-key-flow_buttons"]{margin-top:-54px;position:relative;z-index:5}
+[class*="st-key-flow_buttons"] > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]{padding:0 12px}
+[class*="st-key-flow_buttons"] button{min-height:32px;padding:2px 4px}
+[class*="st-key-flow_buttons"] button p{font-size:.78rem;white-space:nowrap}
+.st-key-flow_buttons_play{opacity:0;animation:appear .35s ease-out 3.6s forwards}
+.st-key-flow_buttons_playq{opacity:0;animation:appear .35s ease-out 2.1s forwards}
+.pf .fact .ring span{display:grid;place-items:center;width:26px;height:26px;font-size:.8rem;font-weight:700;color:#0b0b0b}
+/* the reasoning modal */
+div[data-testid="stDialog"]{backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}   /* blur the app behind the modal */
+div[data-testid="stDialog"] [role="dialog"]{border:1px solid #e1e0d9;border-radius:8px}
+.mi-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#52514e;font-size:.9rem;margin-bottom:6px}
+.mi-head .pill{display:inline-block;padding:3px 12px;border-radius:999px;color:#fff;font-weight:650}
+.mi-sec{border:1px solid #e1e0d9;border-radius:8px;padding:10px 14px;margin:10px 0;background:#fff}
+.mi-h{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#0b0b0b;font-weight:650;margin-bottom:6px}
+.mi-h span{font-weight:400;text-transform:none;letter-spacing:0;color:#898781;margin-left:8px}
+.mi-why{font-size:.98rem;line-height:1.55;color:#0b0b0b}
+.mi-ev{display:grid;grid-template-columns:96px 150px 1fr;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid #f1f0eb;font-size:.86rem}
+.mi-ev:first-of-type{border-top:0}
+.mi-ev .src{font-size:.7rem;letter-spacing:.05em;color:#52514e;background:#f1f0eb;border-radius:4px;padding:1px 6px;justify-self:start}
+.mi-ev code{font-size:.74rem;color:#52514e;background:none;padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi-kv{display:grid;grid-template-columns:96px 1fr;gap:10px;font-size:.88rem;padding:3px 0}
+.mi-kv span{color:#898781;font-size:.78rem}
 
 /* ---- dev panel (sidebar): a utilitarian overlay, deliberately unlike the dashboard — "stats for nerds" ---- */
 section[data-testid="stSidebar"]{--dv-bg:rgba(16,17,19,.94);--dv-fg:#d8d8d4;--dv-mute:#8b8b86;--dv-line:#3a3b3e;--dv-acc:#7ee0b5;
@@ -702,25 +728,28 @@ def flow_actions_html(ev, pending, call):
             remaining = max(0, int(round(pending["deadline"] - time.time())))
             shown = min(remaining, ss.countdown_s)
             deg = int(360 * (1 - shown / max(ss.countdown_s, 1)))
-            out += (f'<div class="fact call"><div class="ring" style="background:conic-gradient(#d03b3b {deg}deg,#efeeea 0)"><span>{shown}</span></div>'
+            out += (f'<div class="fact call anchor"><div class="ring" style="background:conic-gradient(#d03b3b {deg}deg,#efeeea 0)"><span>{shown}</span></div>'
                     f'<div><b>Calling on-call officer</b><span>{"Real" if ss.real_calls else "Simulated"} call when the ring closes</span></div></div>')
         elif a == "PAGE":
             status = (call or {}).get("status")
             label = {"CALLING": "Dialling…", "DONE": "Call placed", "FAILED": "Call failed", "SIMULATED": "Call simulated",
                      "CANCELLED": "Call cancelled"}.get(status, "Phone call")
-            out += f'<div class="fact call">{ICON["PAGE"]}<div><b>{label}</b><span>On-call duty officer</span></div></div>'
+            anchor = " anchor" if pending is not None else ""        # Dismiss shows under it
+            out += f'<div class="fact call{anchor}">{ICON["PAGE"]}<div><b>{label}</b><span>On-call duty officer</span></div></div>'
         else:
             out += f'<div class="fact">{ICON.get(a, ICON["LOG"])}<div><b>{ACTION_TITLE.get(a, a)}</b><span>{ACTION_SUB.get(a, "")}</span></div></div>'
     return out
 
 def flow_html(ev, stage, gate_live=None, gate_ms=None, llm=None, llm_ms=None, play=False, pending=None, call=None):
-    """The process flow. stage: 'gate_running' | 'llm_running' | 'done'. gate_live/llm: live results (None = stored values).
-    play: replay reveal (timed CSS); otherwise the stops show exactly how far the live run has got."""
-    gate = gate_live or (None if stage == "gate_running" else gate_from_probs(ev.p_fault, ev.p_operational, ev.p_real_event))
-    route_known = stage != "gate_running" and ev.route != "PENDING"
+    """The process flow. stage: 'pending' (new record, nothing decided yet) | 'gate_running' | 'llm_running' | 'done'.
+    gate_live/llm: live results (None = stored values). play: replay reveal (timed CSS); otherwise the stops show exactly how far
+    the run has got — nothing past the current stop is ever shown early."""
+    gate = gate_live or (None if stage in ("pending", "gate_running") else gate_from_probs(ev.p_fault, ev.p_operational, ev.p_real_event))
+    route_known = stage not in ("pending", "gate_running") and ev.route != "PENDING"
     route, reason = flow_route(ev, gate) if route_known else (None, "")
     closer = route == "INVESTIGATE"
-    status = {"gate_running": ["done", "active", "todo", "todo", "todo", "todo"],
+    status = {"pending": ["done", "todo", "todo", "todo", "todo", "todo"],
+              "gate_running": ["done", "active", "todo", "todo", "todo", "todo"],
               "llm_running": ["done", "done", "done", "active", "todo", "todo"],
               "done": ["done", "done", "done", "done" if closer else "skip", "done", "done"]}[stage]
     delay = [0, .5, 1.2, 1.7, 3.3, 3.8] if closer else [0, .5, 1.2, 0, 1.8, 2.3]       # replay reveal timeline (s)
@@ -742,7 +771,8 @@ def flow_html(ev, stage, gate_live=None, gate_ms=None, llm=None, llm_ms=None, pl
                                            ("Real event", gate["p_real_event"], VERDICT_COLOR["NATURAL_EVENT"])))
         quick = bars + f'<div class="meta">Tick = {thr}% cut-off to settle without the LLM</div>'
     else:
-        quick = '<div class="wait">Asking ai_decide…</div>' if stage == "gate_running" else '<div class="meta">No quick-check result</div>'
+        quick = ('<div class="wait">Asking ai_decide…</div>' if stage == "gate_running" else
+                 '<div class="meta">Queued for the quick check</div>' if stage == "pending" else '<div class="meta">No quick-check result</div>')
     if route_known:
         routes = (f'<div class="rt {"on" if not closer else "off"}">Auto-resolve</div><div class="rt {"on" if closer else "off"}">Investigate</div>'
                   f'<div class="meta why2">{reason}</div>')
@@ -789,18 +819,47 @@ def flow_html(ev, stage, gate_live=None, gate_ms=None, llm=None, llm_ms=None, pl
     arc = (f'<div class="arc {arc_cls}" style="--d:{delay[2] + .2}s"><svg viewBox="0 0 100 40" preserveAspectRatio="none">'
            '<path pathLength="100" vector-effect="non-scaling-stroke" d="M0 38 C0 8 6 6 18 6 L82 6 C94 6 100 8 100 38"/></svg><span>clear-cut</span></div>')
 
-    # reasoning strip
-    strip = ""
-    if stage == "done":
-        why = humanize(((llm or {}).get("rationale") if llm else None) or ev.rationale or "")
-        facts = ([humanize(e.get("fact", "")) for e in ((llm or {}).get("evidence") or []) if isinstance(e, dict) and e.get("fact")][:4] if llm else
-                 [humanize(e.get("fact", "")) for e in _safe_json(ev.evidence) if e.get("fact")][:4])
-        src = ("AI reasoning · " + ("generated live by" if llm else "from") + " the LLM (ai_query)") if ev.decided_by == "AGENT_SQL" else "Decision note · from the quick check (ai_decide)"
-        live_note = " · models re-run live on the stored input; timings include the round trip to the warehouse" if (gate_live or llm) else ""
-        strip = (f'<div class="strip" style="--d:{delay[4] + .3}s;border-left-color:{vc}"><div class="sh">{src}{live_note}</div>'
-                 f'<div class="tx2">{why}</div><div class="chips2">{"".join(f"<span>{f}</span>" for f in facts)}</div></div>')
     return (f'<div class="pf{" play" if play else ""}{" quick" if not closer else ""}"><div class="trk">{nodes}{arc}</div>'
-            f'<div class="cds">{cards}</div>{strip}</div>')
+            f'<div class="cds">{cards}</div></div>')
+
+def flow_reasoning(ev, cached):
+    """The reasoning modal's content: why the record was decided the way it was, with the evidence, numbers and timings."""
+    llm = (cached or {}).get("llm")
+    gate = (cached or {}).get("gate") or gate_from_probs(ev.p_fault, ev.p_operational, ev.p_real_event)
+    vc = VERDICT_COLOR.get(ev.verdict, MUTED)
+    why = humanize((llm or {}).get("rationale") or ev.rationale or "")
+    evidence = (llm or {}).get("evidence") if llm else _safe_json(ev.evidence)
+    route, reason = flow_route(ev, gate)
+    src = (("Generated live by" if llm else "From") + " the LLM (ai_query)") if ev.decided_by == "AGENT_SQL" else "Decision note from the quick check (ai_decide)"
+    sev = SEVERITY_WORD.get(ev.severity, "")
+    head = (f'<div class="mi-head"><span class="pill" style="background:{vc}">{VERDICT_WORD.get(ev.verdict, ev.verdict)}</span>'
+            f'<span>{sev.capitalize() + " · " if sev else ""}{nice_name(ev.station_name)} · {RULE_WORD.get(ev.rule, ev.rule)}</span></div>')
+    reasoning = f'<div class="mi-sec"><div class="mi-h">Reasoning <span>{src}</span></div><div class="mi-why">{why or "No rationale recorded."}</div></div>'
+    rows = "".join(f'<div class="mi-ev"><span class="src">{e.get("source", "")}</span><code>{e.get("tool", "")}</code><span>{humanize(e.get("fact", ""))}</span></div>'
+                   for e in (evidence or []) if isinstance(e, dict) and e.get("fact"))
+    ev_html = f'<div class="mi-sec"><div class="mi-h">Evidence cited</div>{rows or "<div class=mi-why>None recorded.</div>"}</div>'
+    probs = (" · ".join(f"{lab} {pct(gate[k])}%" for lab, k in (("bad sensor", "p_fault"), ("dam change", "p_operational"), ("real event", "p_real_event")))
+             if gate else "no result")
+    gm, lm = (cached or {}).get("gate_ms"), (cached or {}).get("llm_ms")
+    conf = (llm or {}).get("confidence", ev.confidence if ev.decided_by == "AGENT_SQL" else None)
+    gate_t = f" · {gm / 1000:.1f} s" if gm else ""
+    llm_t = f" · {lm / 1000:.1f} s" if lm else ""
+    conf_t = f" · {pct(conf)}% sure" if conf is not None else ""
+    route_t = "Investigate" if route == "INVESTIGATE" else "Auto-resolve"
+    numbers = (f'<div class="mi-sec"><div class="mi-h">Quick check and route</div><div class="mi-kv"><span>ai_decide</span>{probs}{gate_t}</div>'
+               f'<div class="mi-kv"><span>Route</span>{route_t} — {reason}</div>'
+               + (f'<div class="mi-kv"><span>ai_query</span>{LLM_MODEL}{llm_t}{conf_t}</div>' if route == "INVESTIGATE" else "")
+               + '</div>')
+    return head + reasoning + ev_html + numbers
+
+@st.dialog("Why this decision", width="large", on_dismiss=lambda: ss.pop("flow_info", None))
+def flow_info_dialog(ev, cached):
+    st.markdown(f'<div class="mi">{flow_reasoning(ev, cached)}</div>', unsafe_allow_html=True)
+    with st.expander("Model input (the state JSON both models saw)"):
+        try:
+            st.json(json.loads(ev.agent_state or ev.state_json or "{}"), expanded=1)
+        except Exception:
+            st.code(ev.agent_state or ev.state_json or "", language="json")
 
 def run_live(ev, paint):
     """Re-run the two models on this record once (live mode, or always for a scenario), painting each stop as its result arrives.
@@ -833,15 +892,14 @@ def run_live(ev, paint):
     ss.hero_shown_at = 0                                # nothing left to reveal; reruns may proceed
     return ss.live_results[ev.candidate_id]
 
-def call_controls(ev, pending):
-    """Cancel / Call now during the countdown; places (or simulates) the call when it reaches zero. Streamlit buttons can't live in the HTML."""
+def call_controls(ev, pending, col):
+    """Cancel / Call now during the countdown, Dismiss afterwards, in `col` (under the Act card's call tile); places (or simulates)
+    the call when the countdown reaches zero. Streamlit buttons can't live in the HTML."""
     if pending is None:
         return
     remaining = int(round(pending["deadline"] - time.time()))
-    b1, b2, b3 = st.columns([4, 1, 1])
+    b2, b3 = col.columns(2, gap="small")
     if remaining > 0:
-        mode = "A real call will be placed" if ss.real_calls else "Simulated: no real call will be placed"
-        b1.caption(f"The system has decided to call. {mode} in {remaining} s unless someone cancels.")
         if b2.button("Cancel", width="stretch", key="cancel_call"):
             ss.calls[ev.candidate_id] = {"status": "CANCELLED", "result": "cancelled by operator"}
             ss.pending_call = None
@@ -1113,11 +1171,24 @@ else:
     cached = ss.live_results.get(flow_ev.candidate_id)
     if (ss.live_mode or getattr(flow_ev, "dynamic", False)) and fresh and cached is None:
         cached = run_live(flow_ev, paint_flow)  # the only place the models are re-run
+    queued = cached is None and scenario is None and not settled and ss.get("last_hero") != flow_ev.candidate_id
     if cached is not None:
         paint_flow("done", cached["gate"], cached["gate_ms"], cached["llm"], cached["llm_ms"])
+    elif queued:
+        paint_flow("pending")                   # a new record while the playhead settles: nothing decided yet, nothing given away
     else:
         paint_flow("done", play=fresh)          # stored results, with the timed reveal when the record just arrived
-    call_controls(flow_ev, flow_pending())
+    # buttons, lined up with the stops and lifted into the bottom of the Verdict and Act cards
+    played = not queued and cached is None and fresh  # during the replay reveal the buttons fade in with the Verdict stop
+    with st.container(key="flow_buttons" + ("_play" + ("" if flow_ev.route == "INVESTIGATE" else "q") if played else "")):
+        bcols = st.columns(6, gap="small")
+        if not queued and bcols[4].button("More information", key="flow_info_btn", type="tertiary", icon=":material/info:"):
+            ss.flow_info, ss.playing = flow_ev.candidate_id, False
+        call_controls(flow_ev, flow_pending(), bcols[5])
+    if ss.get("flow_info") == flow_ev.candidate_id:
+        flow_info_dialog(flow_ev, cached)
+    elif ss.get("flow_info"):
+        ss.flow_info = None                     # the record changed: don't reopen on an old one
     if scenario is not None:
         st.caption(f"Route cut-off {AUTO_RESOLVE_THRESHOLD:.2f} (round R2) · neighbours count as moving above {int(NEIGHBOUR_MOVE_PCT*100)} % · "
                    f"model {LLM_MODEL}. The scenario is not written to the tables.")
