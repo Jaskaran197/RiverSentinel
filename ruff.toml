@@ -1,0 +1,15 @@
+# Lint only (no `ruff format`): the codebase uses a dense one-liner style on purpose.
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+  "E401",  # multiple imports on one line
+  "E701",  # multiple statements on one line (colon)
+  "E702",  # multiple statements on one line (semicolon)
+  "E731",  # lambda assignment
+  "E402",  # section-local imports in timeline.py are intentional
+  "E712",  # `== True` is required for pandas Series masks
+  "B905",  # zip(strict=) noise
+]
