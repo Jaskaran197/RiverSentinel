@@ -96,16 +96,16 @@ svg.links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-
 svg.links path{fill:none;stroke-width:1;stroke-dasharray:3 3;opacity:.75;transition:d .35s ease}
 /* panels: bolted onto the map's right edge, stacked without overlap; notch at the station's height */
 .panel{position:absolute;top:0;background:rgba(255,255,255,.96);border:1px solid #d0d0cc;border-left:3px solid var(--c);border-radius:0 4px 4px 0;
-       padding:6px 10px 7px;white-space:nowrap;font:12px/1.35 system-ui,sans-serif;color:#1d1d1b;box-shadow:2px 2px 8px rgba(0,0,0,.08);
+       padding:5px 10px 6px;white-space:nowrap;font:12px/1.3 system-ui,sans-serif;color:#1d1d1b;box-shadow:2px 2px 8px rgba(0,0,0,.08);
        transition:top .35s ease;max-width:calc(var(--gutter) - 16px);z-index:4}
 .panel::before{content:"";position:absolute;left:-9px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--c);transition:top .35s ease}
-.panel.nb{padding:4px 9px 5px;font-size:11.5px;line-height:1.3}
+.panel.nb{padding:3px 9px 4px;font-size:11.5px;line-height:1.25}
 .panel.nb .val{font-size:10.5px}
 .panel .hd{display:flex;align-items:center;gap:6px}
 .panel .id{font-weight:700;letter-spacing:.03em}
 .panel .badge{background:var(--c);color:#fff;font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:999px}
 .panel .nm{color:#4a4a47;overflow:hidden;text-overflow:ellipsis}
-.panel svg{display:block;margin-top:4px}
+.panel svg{display:block;margin-top:3px}
 .panel .val{font-size:11px;color:#4a4a47;margin-top:1px}
 .maplibregl-ctrl-attrib{font-size:10px}
 """
@@ -140,7 +140,7 @@ function items(data) {                                 // the current station fi
 function panelHtml(it) {
   const badge = it.role === "sel" ? "selected" : "neighbour" + (it.km != null ? ` · ${it.km < 10 ? it.km.toFixed(1) : Math.round(it.km)} km` : "");
   return `<div class="hd"><span class="id">${esc(it.id)}</span><span class="badge">${badge}</span></div>` +
-         `<div class="nm" title="${esc(it.name)}">${esc(it.name)}</div>` + spark(it.spark, it.color, it.role === "sel" ? 30 : 18) +
+         `<div class="nm" title="${esc(it.name)}">${esc(it.name)}</div>` + spark(it.spark, it.color, it.role === "sel" ? 24 : 14) +
          (it.spark_label ? `<div class="val">${esc(it.spark_label)}</div>` : "");
 }
 function arrange(sel, nb, selTop, H) {

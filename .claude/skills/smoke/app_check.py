@@ -1,7 +1,7 @@
 """Headless render of timeline.py via Streamlit AppTest: real (read-only) Databricks data, real calls and live AI forced off.
 AppTest can't click inside the custom player component, so it moves the playhead through session_state instead.
 Usage: python .claude/skills/smoke/app_check.py [N]   # render at N evenly spaced points in the month (default 3)"""
-import sys
+import re, sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -25,7 +25,8 @@ for i in range(1, steps + 1):
     errs = [e.value for e in at.exception]
     ok &= not errs
     html = " ".join(m.value for m in at.markdown)
-    cards += 'class="hero' in html and 'class="flow"' in html
-    print(f"t={at.session_state['t']:%b %d %H:%M}:", errs or "ok", "| metrics:", [m.value for m in at.metric])
-print(f"decision card rendered at {cards}/{steps} points")
+    cards += 'class="pf' in html                    # the process flow for the current record
+    stats = re.findall(r'<div class="vl">([^<]*)</div>', html)
+    print(f"t={at.session_state['t']:%b %d %H:%M}:", errs or "ok", "| summary cards:", stats)
+print(f"process flow rendered at {cards}/{steps} points")
 sys.exit(0 if ok else 1)

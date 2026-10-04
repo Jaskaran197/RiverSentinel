@@ -1,12 +1,12 @@
 """
 RiverSentinel — river gauge watch, replayed.
 
-Pick a moment in September. The screen shows only what the system knew then: which gauges reported something odd,
-what it decided each one was (bad sensor, dam change, real river event), what it did about it, and — when it decides to call someone — a short
-countdown during which a human can cancel before the real call is placed. Step forward one event at a time, or press Play.
+Pick a moment in September. The screen shows only what the system knew then: the river system and its gauges on a map, summary
+counts, and how the current record was handled — detected, checked, routed, investigated, decided, acted on — including a short
+countdown during which a human can cancel before a phone call is placed. The Dev Panel (sidebar) drives playback and scenarios.
 
-Run:   streamlit run app/timeline.py
-Voice: on_page() is the hook — wire scripts/page.py there when adding the phone call.
+Run:   streamlit run timeline.py
+Voice: page.py (ElevenLabs + Twilio); without it, or without its settings, calls are simulated.
 """
 from __future__ import annotations
 import json, os, time
@@ -15,7 +15,6 @@ from pathlib import Path
 
 import sys, threading
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 # the phone module (scripts/page.py). Optional: without it, or without ElevenLabs/Twilio settings, calls are simulated.
@@ -43,121 +42,53 @@ load_env()
 CATALOG = os.environ.get("CATALOG", "river")
 
 # decision rules + helpers (no Streamlit); imported after load_env() because logic reads the environment
-from logic import (MDT, derive, has, fmt, _safe_json, _ids, _nearby, neighbour_pcts, AUTO_RESOLVE_THRESHOLD, NEIGHBOUR_MOVE_PCT,
+from logic import (MDT, derive, has, fmt, _safe_json, _nearby, neighbour_pcts, AUTO_RESOLVE_THRESHOLD, NEIGHBOUR_MOVE_PCT,
                    decide_route, finalize, pct, nice_name, humanize, scenario_event, route_with_reason, gate_from_probs)
 from scenarios import SCENARIOS
 from player import player
 from system_map import system_map
 
-def mdt(x):
-    """UTC time(s) → naive MDT wall-clock time for charts (Plotly has no time zones and can't parse offsets in shapes)."""
-    return x.dt.tz_convert(MDT).dt.tz_localize(None) if isinstance(x, pd.Series) else pd.Timestamp(x).tz_convert(MDT).tz_localize(None)
-
 # ----------------------------------------------------------------------------- words (plain language for everything the tables say)
 VERDICT_WORD = {"SENSOR_FAULT": "Bad sensor", "NATURAL_EVENT": "Real river event", "OPERATIONAL_CHANGE": "Dam or operator change",
                 "INCONCLUSIVE": "Not sure", "PENDING": "Still looking"}
-ACTION_WORD = {"PAGE": "Called the on-call person", "QUARANTINE": "Flagged the readings as bad", "TICKET": "Sent a technician ticket",
-               "WATCH": "Kept watching", "LOG": "Noted it, no action"}
 SEVERITY_WORD = {"DANGER_TO_LIFE": "danger to life", "SIGNIFICANT": "serious", "MINOR": "minor", "NONE": ""}
 RULE_WORD = {"PHYSICAL_BREACH": "a reading outside what is physically possible", "SPIKE": "a single reading that jumped and came back",
              "FLATLINE": "a reading stuck on one value", "STEP": "a sudden step up or down", "GAP": "the gauge stopped reporting",
              "RAPID_RISE": "a fast rise"}
-ROUTE_WORD = {"AUTO_RESOLVE": "clear-cut, decided instantly", "INVESTIGATE": "needed a closer look"}
-WHO_WORD = {"GATE": "quick check", "AGENT_SQL": "closer look (AI reasoning)"}
 
 # palette (validated reference palette; fixed slots)
-SURFACE, GRID, AXIS, INK, INK2, MUTED = "#fcfcfb", "#e1e0d9", "#c3c2b7", "#0b0b0b", "#52514e", "#898781"
+INK, MUTED = "#0b0b0b", "#898781"
 VERDICT_COLOR = {"SENSOR_FAULT": "#eb6834", "NATURAL_EVENT": "#2a78d6", "OPERATIONAL_CHANGE": "#898781",
                  "INCONCLUSIVE": "#eda100", "PENDING": "#c3c2b7"}
-ACTION_SYMBOL = {"PAGE": "star", "QUARANTINE": "x", "TICKET": "square", "WATCH": "diamond", "LOG": "circle"}
 
 st.set_page_config(page_title="RiverSentinel", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""<style>
-[data-testid="stMainBlockContainer"]{padding:1.25rem 2rem 2rem 2rem;max-width:none}   /* full width */
+[data-testid="stMainBlockContainer"]{padding:.6rem 2rem 2rem 2rem;max-width:none}   /* full width */
 /* no Streamlit toolbar (Deploy, menu, running status); the header stays only for the collapsed sidebar's expand button */
 [data-testid="stHeader"]{background:transparent;height:0;min-height:0;pointer-events:none}
 [data-testid="stAppDeployButton"], [data-testid="stMainMenu"], [data-testid="stStatusWidget"], [data-testid="stDecoration"]{display:none !important}
 [data-testid="stExpandSidebarButton"]{pointer-events:auto;transform:translateY(10px)}
-.card{border:1px solid #e1e0d9;border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fcfcfb}
-.card h4{margin:0 0 6px 0;font-size:1.02rem}
-.card .row{margin:3px 0;color:#0b0b0b}
-.card .k{color:#52514e;display:inline-block;min-width:170px}
-.card .why{color:#52514e;margin-top:8px;font-size:.93rem}
-.badge{display:inline-block;padding:1px 8px;border-radius:10px;color:#fff;font-size:.82rem;margin-left:6px;vertical-align:middle}
-.stMetric label{color:#52514e}
-@keyframes slidein {from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none}}
+/* shared: keyframes, the idle state, the countdown ring, the "thinking" dots */
 @keyframes pulse {0%{box-shadow:0 0 0 0 rgba(42,120,214,.45)} 70%{box-shadow:0 0 0 12px rgba(42,120,214,0)} 100%{box-shadow:0 0 0 0 rgba(42,120,214,0)}}
-.hero{border-left:6px solid #898781;padding:4px 0 4px 14px;margin:2px 0 6px 0}
-.fresh{animation:slidein .45s ease-out}
-.hero .when{color:#52514e;font-size:.9rem}
-.hero .where{font-size:1.35rem;font-weight:650;margin:2px 0 6px 0;color:#0b0b0b}
-.hero .odd{color:#0b0b0b;margin-bottom:8px}
-.verdict{display:inline-block;padding:4px 12px;border-radius:999px;color:#fff;font-weight:650;font-size:1rem;background:#898781}
-.flow{display:flex;align-items:stretch;gap:8px;margin-top:4px}
-.step{flex:1;border:1px solid #e1e0d9;border-radius:8px;padding:10px 12px;background:#fff;min-width:0}
-.step .t{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:#898781;margin-bottom:2px}
-.step .v{font-weight:600;color:#0b0b0b}
-.step .s{color:#52514e;font-size:.88rem}
-.arrow{align-self:center;color:#c3c2b7;font-size:1.3rem}
-.bar{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:.86rem;color:#52514e}
-.bar .lab{width:92px;flex:none}
-.bar .tr{flex:1;height:8px;background:#efeeea;border-radius:4px;overflow:hidden}
-.bar .fl{height:100%;border-radius:4px}
-.bar .pc{width:36px;text-align:right;flex:none;color:#0b0b0b}
-.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.act{display:flex;align-items:center;gap:12px;border:1px solid #e1e0d9;border-radius:8px;padding:10px 14px;background:#fff;flex:1 1 220px;max-width:100%}
-.act.big{border-width:1.5px}
-.act svg{flex:none}
-.act .at{font-weight:600;color:#0b0b0b}
-.act .as{color:#52514e;font-size:.86rem}
-.ring{width:54px;height:54px;border-radius:50%;background:#efeeea;display:grid;place-items:center;flex:none}
-.ring span{width:42px;height:42px;border-radius:50%;background:#fff;display:grid;place-items:center;font-weight:700;color:#0b0b0b}
-.why{margin-top:10px;color:#0b0b0b;border-left:3px solid #c3c2b7;padding:6px 10px;background:#fff;border-radius:4px;font-style:italic}
-.whyhead{font-style:normal;font-size:.74rem;letter-spacing:.04em;text-transform:uppercase;color:#898781;margin-bottom:3px}
-.model{display:inline-block;font-weight:500;color:#52514e;background:#efeeea;border-radius:4px;padding:0 6px;margin:0 0 6px 0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem}
-.chip{display:inline-block;border:1px solid #e1e0d9;border-radius:999px;padding:2px 10px;margin:4px 6px 0 0;font-size:.84rem;color:#52514e;background:#fff}
-.idle{display:flex;align-items:center;gap:14px;border:1px dashed #c3c2b7;border-radius:10px;padding:18px;color:#52514e;background:#fcfcfb}
-.dot{width:12px;height:12px;border-radius:50%;background:#2a78d6;animation:pulse 1.8s infinite}
-
-/* ---- staged reveal of the decision pipeline (plays once when a new decision arrives) ---- */
 @keyframes appear {from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none}}
 @keyframes grow {from{transform:scaleX(0)} to{transform:scaleX(1)}}
 @keyframes fadeout {to{opacity:0;visibility:hidden}}
 @keyframes reveal {from{clip-path:inset(0 100% 0 0)} to{clip-path:inset(0 0 0 0)}}
 @keyframes blink {0%,80%,100%{opacity:.2} 40%{opacity:1}}
-.step{position:relative}
-.play .s1{opacity:0;animation:appear .35s ease-out forwards}
-.play .s1 + .arrow, .play .s2{opacity:0;animation:appear .35s ease-out .45s forwards}
-.play .s2 .fl{transform-origin:left;transform:scaleX(0);animation:grow .5s ease-out .75s forwards}
-.play .s2 .verdictline{opacity:0;animation:appear .3s ease-out 1.15s forwards}
-.play .s2 + .arrow, .play .s3{opacity:0;animation:appear .35s ease-out 1.4s forwards}
-.play .s3 .answer{opacity:0;animation:appear .4s ease-out 3.3s forwards}
-.play .s3 .think{animation:fadeout .3s ease-out 3.2s forwards}
-.think{position:absolute;inset:0;background:#fff;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#52514e;font-size:.9rem;gap:6px}
+.idle{display:flex;align-items:center;gap:14px;border:1px dashed #c3c2b7;border-radius:10px;padding:18px;color:#52514e;background:#fcfcfb}
+.dot{width:12px;height:12px;border-radius:50%;background:#2a78d6;animation:pulse 1.8s infinite}
+.ring{width:54px;height:54px;border-radius:50%;background:#efeeea;display:grid;place-items:center;flex:none}
+.ring span{width:42px;height:42px;border-radius:50%;background:#fff;display:grid;place-items:center;font-weight:700;color:#0b0b0b}
 .dots span{display:inline-block;width:7px;height:7px;margin:0 2px;border-radius:50%;background:#52514e;animation:blink 1.1s infinite}
 .dots span:nth-child(2){animation-delay:.2s} .dots span:nth-child(3){animation-delay:.4s}
-.play .s3 + .arrow, .play .s4, .play.quick .s2 + .arrow, .play.quick .s4{opacity:0;animation:appear .4s ease-out forwards}
-.play .s4{animation-delay:3.7s} .play .s3 + .arrow{animation-delay:3.7s}
-.play.quick .s4, .play.quick .s2 + .arrow{animation-delay:1.3s}
-.play .acts{opacity:0;animation:appear .45s ease-out 4.1s forwards}
-.play.quick .acts{animation-delay:1.7s}
-.play .why{opacity:0;animation:appear .5s ease-out 3.4s forwards}
-.play .why .txt{clip-path:inset(0 100% 0 0);animation:reveal 1.6s linear 3.5s forwards}
-.play.quick .why{animation-delay:1.5s} .play.quick .why .txt{animation-delay:1.6s;animation-duration:.8s}
-.play .chips{opacity:0;animation:appear .4s ease-out 4.9s forwards}
-.play.quick .chips{animation-delay:2.1s}
-.lat{float:right;font-size:.72rem;color:#898781;font-family:ui-monospace,Menlo,Consolas,monospace}
-.pop{animation:appear .35s ease-out}
-.livenote{margin-top:8px;font-size:.76rem;color:#898781}
 
-/* ---- dashboard header (new) ---- */
-.dash-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:0 0 14px 0}
+/* ---- dashboard header ---- */
+.dash-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin:0 0 10px 0}
 .dash-title{font-size:1.65rem;font-weight:650;color:#0b0b0b;line-height:1.2}
 .dash-title .chev{color:#c3c2b7;margin:0 .4em;font-weight:400}
 .dash-brand{text-align:right;flex:none}
 .dash-brand .logo{font-size:1.25rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#0b0b0b}
 .dash-brand .clock{font-size:.95rem;color:#52514e;margin-top:2px;font-variant-numeric:tabular-nums}
-.legacy-sep{margin:72px 0 28px 0;padding-top:10px;border-top:2px dashed #e1e0d9;color:#898781;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase}
 
 /* ---- summary cards (beside the map) ---- */
 .stats{display:flex;flex-direction:column;gap:8px}
@@ -166,7 +97,7 @@ st.markdown("""<style>
 .stat .ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .stat .tx{min-width:0}
 .stat .lb{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#52514e}
-.stat .vl{font-size:1.55rem;font-weight:650;line-height:1.15;color:#0b0b0b;font-variant-numeric:tabular-nums}
+.stat .vl{font-size:1.4rem;font-weight:650;line-height:1.15;color:#0b0b0b;font-variant-numeric:tabular-nums}
 .stat .sb{font-size:.78rem;color:#898781;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stat .tip{position:absolute;top:7px;right:8px;width:16px;height:16px;border-radius:50%;border:1px solid #c3c2b7;color:#898781;font-size:.66rem;
            line-height:14px;text-align:center;cursor:help;outline:none}
@@ -176,8 +107,8 @@ st.markdown("""<style>
           transform:translateY(-3px);transition:opacity .15s,transform .15s,visibility .15s;z-index:20;pointer-events:none}
 .stat .tip:hover .tt, .stat .tip:focus .tt{opacity:1;visibility:visible;transform:none}
 
-/* ---- process flow (new) ---- */
-.sec-head{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#52514e;font-weight:600;margin:26px 0 2px 0}
+/* ---- process flow ---- */
+.sec-head{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#52514e;font-weight:600;margin:16px 0 0 0}
 .sec-head span{margin-left:10px;font-weight:400;letter-spacing:.04em;text-transform:none;color:#898781}
 .pf{--on:#0b0b0b;--off:#e1e0d9;margin-top:6px}
 .pf .trk{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:16px;height:62px}   /* 16px = st.columns(gap='small'), so the button row lines up */
@@ -371,26 +302,6 @@ def load_stations() -> pd.DataFrame:
                  FROM {CATALOG}.silver.station_context ORDER BY province, station_id""")
 
 @st.cache_data(ttl=900)
-def load_cases() -> pd.DataFrame:
-    df = q(f"SELECT case_id, station_id, win_start_utc, win_end_utc, expected_verdict, notes FROM {CATALOG}.silver.cases ORDER BY case_id")
-    for c in ("win_start_utc", "win_end_utc"):
-        df[c] = pd.to_datetime(df[c], utc=True)
-    return df
-
-@st.cache_data(ttl=900)
-def load_results():
-    """Two numbers for the footer and the one-line explanation of how the system improved itself."""
-    try:
-        golden = q(f"SELECT case_id, outcome_ok FROM {CATALOG}.gold.scorecard_golden")
-    except Exception:
-        golden = pd.DataFrame(columns=["case_id", "outcome_ok"])
-    try:
-        plan = q(f"SELECT from_round_id, to_round_id, trigger, change FROM {CATALOG}.gold.plan_iterations ORDER BY created_at_utc")
-    except Exception:
-        plan = pd.DataFrame()
-    return golden, plan
-
-@st.cache_data(ttl=900)
 def load_readings(station_id: str, signal: str) -> pd.DataFrame:
     df = q(f"SELECT ts_utc, value, is_quarantined FROM {CATALOG}.silver.readings WHERE station_id='{station_id}' AND signal='{signal}' ORDER BY ts_utc")
     df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
@@ -431,67 +342,6 @@ def place_call(alert: dict, contacts: list, escalate: bool, key: str) -> None:
         pass
     t.start()
 
-
-# ----------------------------------------------------------------------------- map (pydeck: real basemap, rendered natively by Streamlit)
-import pydeck as pdk
-
-def _rgb(hex_, a=255):
-    h = hex_.lstrip("#"); return [int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a]
-
-def station_map(st_df: pd.DataFrame, focus_id=None, vc=MUTED, pcts=None, height=240):
-    """Gauge network on a real basemap. With a focus station: fly to it, draw same-river links (solid) and nearby
-    other-river links (thin), colour neighbours by their 24-hour movement. Without one: the whole network."""
-    pcts = pcts or {}
-    byid = st_df.set_index("station_id")
-    base = pd.DataFrame({"lon": st_df.lon.astype(float), "lat": st_df.lat.astype(float), "label": [nice_name(n) for n in st_df.name]})
-    layers = [pdk.Layer("ScatterplotLayer", data=base, get_position="[lon, lat]", get_fill_color=_rgb("#b8b7b0"),
-                        get_radius=1, radius_min_pixels=4, radius_max_pixels=6, pickable=True)]
-    if focus_id is not None and focus_id in byid.index:
-        f = byid.loc[focus_id]
-        flat, flon = float(f.lat), float(f.lon)
-        conn_ids = [i for i in _ids(f.get("upstream_ids")) + _ids(f.get("downstream_ids")) if i in byid.index]
-        near = [(i, km) for i, km in _nearby(f.get("nearby_ids")) if i in byid.index and i not in conn_ids]
-        if conn_ids:
-            lines = pd.DataFrame([{"s": [flon, flat], "t": [float(byid.loc[i].lon), float(byid.loc[i].lat)]} for i in conn_ids])
-            layers.append(pdk.Layer("LineLayer", data=lines, get_source_position="s", get_target_position="t",
-                                    get_color=_rgb("#52514e"), get_width=3, width_units="pixels"))
-        if near:
-            lines = pd.DataFrame([{"s": [flon, flat], "t": [float(byid.loc[i].lon), float(byid.loc[i].lat)]} for i, _ in near])
-            layers.append(pdk.Layer("LineLayer", data=lines, get_source_position="s", get_target_position="t",
-                                    get_color=_rgb("#c3c2b7"), get_width=1.5, width_units="pixels"))
-        nb = conn_ids + [i for i, _ in near]
-        if nb:
-            rows = []
-            for i in nb:
-                pcv = pcts.get(i)
-                if pcv is None:    col, word = "#898781", "no change data"
-                elif pcv > 0.20:   col, word = VERDICT_COLOR["NATURAL_EVENT"], f"rising {pcv*100:+.0f}%"
-                elif pcv < -0.20:  col, word = VERDICT_COLOR["SENSOR_FAULT"], f"falling {pcv*100:+.0f}%"
-                else:              col, word = "#898781", f"steady {pcv*100:+.0f}%"
-                rows.append({"lon": float(byid.loc[i].lon), "lat": float(byid.loc[i].lat), "color": _rgb(col),
-                             "txt": f"{pcv*100:+.0f}%" if pcv is not None else "", "label": f"{nice_name(byid.loc[i].name)} · {word}"})
-            nbd = pd.DataFrame(rows)
-            layers.append(pdk.Layer("ScatterplotLayer", data=nbd, get_position="[lon, lat]", get_fill_color="color",
-                                    get_radius=1, radius_min_pixels=7, radius_max_pixels=9, pickable=True))
-            layers.append(pdk.Layer("TextLayer", data=nbd, get_position="[lon, lat]", get_text="txt", get_size=12,
-                                    get_color=_rgb("#52514e"), get_pixel_offset=[14, -10], get_text_anchor="'start'", get_alignment_baseline="'center'"))
-        fd = pd.DataFrame([{"lon": flon, "lat": flat, "label": nice_name(f["name"]), "name": nice_name(f["name"])}])
-        layers.append(pdk.Layer("ScatterplotLayer", data=fd, get_position="[lon, lat]", get_fill_color=_rgb("#ffffff"),
-                                get_radius=1, radius_min_pixels=14, radius_max_pixels=14))
-        layers.append(pdk.Layer("ScatterplotLayer", data=fd, get_position="[lon, lat]", get_fill_color=_rgb(vc),
-                                get_radius=1, radius_min_pixels=10, radius_max_pixels=10, pickable=True))
-        layers.append(pdk.Layer("TextLayer", data=fd, get_position="[lon, lat]", get_text="name", get_size=13,
-                                get_color=_rgb("#0b0b0b"), get_pixel_offset=[0, 22], get_text_anchor="'middle'", get_alignment_baseline="'top'"))
-        far = max([km for _, km in near] + [0]) or 30
-        zoom = 9.2 if far <= 15 else 8.3 if far <= 35 else 7.6 if far <= 60 else 6.9
-        view = pdk.ViewState(latitude=flat, longitude=flon, zoom=zoom, pitch=0)
-    else:
-        lat, lon = st_df.lat.astype(float), st_df.lon.astype(float)
-        span = max(lat.max() - lat.min(), (lon.max() - lon.min()) * 0.6, 0.05)       # degrees; lon squeezed at these latitudes
-        zoom = 9.5 if span < 0.25 else 8.3 if span < 0.6 else 7.3 if span < 1.2 else 6.3 if span < 2.5 else 5.3 if span < 5 else 3.0
-        view = pdk.ViewState(latitude=float((lat.max() + lat.min()) / 2), longitude=float((lon.max() + lon.min()) / 2), zoom=zoom, pitch=0)
-    deck = pdk.Deck(layers=layers, initial_view_state=view, map_style="light", tooltip={"text": "{label}"})
-    st.pydeck_chart(deck, width="stretch", height=height)
 
 # ----------------------------------------------------------------------------- live model calls (same inputs as the SQL pipeline)
 LLM_MODEL = os.environ.get("LLM_MODEL", "databricks-meta-llama-3-3-70b-instruct")
@@ -561,132 +411,9 @@ ACTION_SUB = {"PAGE": "On-call duty officer", "QUARANTINE": "Readings excluded f
               "TICKET": "Field inspection requested for this gauge", "WATCH": "Station placed on watch; re-evaluated on next readings", "LOG": "Recorded, no intervention"}
 ACTION_TITLE = {"PAGE": "Phone call", "QUARANTINE": "Data quarantined", "TICKET": "Technician ticket", "WATCH": "Watch", "LOG": "Logged"}
 ACTION_ORDER = ["PAGE", "QUARANTINE", "TICKET", "WATCH", "LOG"]
-ARROW = '<div class="arrow">&#8594;</div>'
 
 
-def hero(ev, fresh: bool, pending, call):
-    """The live decision card: what was spotted, how it was decided, what was done. Renders HTML, a sparkline, call buttons."""
-    vc = VERDICT_COLOR.get(ev.verdict, MUTED)
-    sev = SEVERITY_WORD.get(ev.severity, "")
-    unit = "m³/s" if ev.signal == "DISCHARGE" else "m"
-    value_txt = f"{ev.value:.3g} {unit}" if ev.value is not None else "no value"
-    was = ""
-    if ev.delta_6h is not None and ev.value is not None and abs(ev.delta_6h) > 1e-9:
-        was = f", was {ev.value - ev.delta_6h:.3g} six hours earlier"
-    facts = [humanize(e.get("fact", "")) for e in _safe_json(ev.evidence) if e.get("fact")][:3]
-    why = humanize((ev.rationale or "").strip())
-    closer = ev.route == "INVESTIGATE"
-    odd = RULE_WORD.get(ev.rule, ev.rule)
-    odd_cap = odd[0].upper() + odd[1:]
-    anim = "fresh" if fresh else ""
-    station = nice_name(ev.station_name)
-
-    dynamic = getattr(ev, "dynamic", False)
-    box = st.container(border=True)
-    c1, c2 = box.columns([1.0, 2.1])
-    with c1:
-        head_slot = st.empty()
-        def paint_head():
-            vc_ = VERDICT_COLOR.get(ev.verdict, MUTED); sev_ = SEVERITY_WORD.get(ev.severity, "")
-            badge_txt = ("Deciding…" if ev.verdict == "PENDING" else VERDICT_WORD.get(ev.verdict, ev.verdict) + (f" · {sev_}" if sev_ else ""))
-            head_slot.markdown(f'<div class="hero {anim}" style="border-left-color:{vc_}"><div class="when">{("Scenario · " + getattr(ev, "scenario", "")) + " · " if dynamic else ""}{fmt(ev.visible_at)}</div><div class="where">{station}</div>'
-                               f'<div class="odd">{odd_cap}: <b>{value_txt}</b>{was}.</div>'
-                               f'<span class="verdict" style="background:{vc_}">{badge_txt}</span></div>', unsafe_allow_html=True)
-        paint_head()
-        station_map(stations, ev.station_id, vc, neighbour_pcts(ev.state_json), height=240)
-        st.caption("Neighbouring gauges in the last 24 hours: blue rising, orange falling, grey steady. Solid line = same river.")
-        rd = load_readings(ev.station_id, ev.signal)
-        t0, t1 = ev.visible_at - timedelta(hours=6), ev.visible_at
-        d = rd[(rd.ts_utc >= t0) & (rd.ts_utc <= t1)]
-        if len(d):
-            sp = go.Figure(go.Scatter(x=mdt(d.ts_utc), y=d.value, mode="lines", line=dict(width=2, color=vc), hoverinfo="skip"))
-            sp.add_vrect(x0=mdt(max(ev.ts_start_utc, t0)), x1=mdt(min(max(ev.ts_end_utc, ev.ts_start_utc + timedelta(minutes=10)), t1)),
-                         fillcolor=vc, opacity=0.15, line_width=0)
-            sp.update_layout(height=90, margin=dict(l=0, r=0, t=6, b=0), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                             xaxis=dict(visible=False, range=[mdt(t0), mdt(t1)]), yaxis=dict(visible=False, rangemode="tozero"), showlegend=False)
-            st.plotly_chart(sp, width="stretch", config={"displayModeBar": False, "staticPlot": True})
-            st.caption(f"Last 6 hours, {('flow' if ev.signal == 'DISCHARGE' else 'water level')} in {unit}. Shaded: the odd readings.")
-    with c2:
-        slot = st.empty()
-        acts = sorted(ev.actions, key=lambda x: ACTION_ORDER.index(x) if x in ACTION_ORDER else 9) or ["LOG"]
-        used_rain = bool(ev.evidence) and '"RAIN"' in str(ev.evidence)
-
-        def tiles_html():
-            tiles = ""
-            for a in acts:
-                if a == "PAGE" and pending is not None:
-                    remaining = max(0, int(round(pending["deadline"] - time.time())))
-                    if remaining > 0:
-                        deg = int(360 * (1 - min(remaining, ss.countdown_s) / max(ss.countdown_s, 1)))
-                        mode = "Real call" if ss.real_calls else "Simulated call"
-                        shown = remaining if remaining <= ss.countdown_s else ss.countdown_s
-                        tiles += (f'<div class="act big" style="border-color:#d03b3b"><div class="ring" style="background:conic-gradient(#d03b3b {deg}deg,#efeeea 0)"><span>{shown}</span></div>'
-                                  f'<div><div class="at">Phone call · on-call duty officer</div><div class="as">{mode} placed when the ring closes</div></div></div>')
-                        continue
-                    status = (call or {}).get("status")
-                    label = {"CALLING": "Phone call · dialling", "DONE": "Phone call · placed", "FAILED": "Phone call · failed",
-                             "SIMULATED": "Phone call · simulated", "CANCELLED": "Phone call · cancelled by operator"}.get(status, "Phone call")
-                    sub = "On-call duty officer"
-                    if status == "DONE" and isinstance((call or {}).get("result"), list):
-                        sub = " · ".join(f"contact {x.get('contact_order')}: {str(x.get('status', '')).lower().replace('_', ' ')}" for x in call["result"])
-                    elif status == "FAILED":
-                        sub = str(call.get("result"))[:140]
-                    tiles += f'<div class="act big" style="border-color:#d03b3b">{ICON["PAGE"]}<div><div class="at">{label}</div><div class="as">{sub}</div></div></div>'
-                else:
-                    border = f'style="border-color:{vc}"' if a in ("PAGE", "QUARANTINE") else ""
-                    tiles += f'<div class="act" {border}>{ICON.get(a, ICON["LOG"])}<div><div class="at">{ACTION_TITLE.get(a, a)}</div><div class="as">{ACTION_SUB.get(a, "")}</div></div></div>'
-            return tiles
-
-        def bars_html(pf, po, pr):
-            out = ""
-            for lab, p_, col in (("Bad sensor", pf, VERDICT_COLOR["SENSOR_FAULT"]), ("Dam change", po, VERDICT_COLOR["OPERATIONAL_CHANGE"]), ("Real event", pr, VERDICT_COLOR["NATURAL_EVENT"])):
-                out += (f'<div class="bar"><span class="lab">{lab}</span><div class="tr"><div class="fl" style="width:{pct(p_)}%;background:{col}"></div></div><span class="pc">{pct(p_)}%</span></div>')
-            return out
-
-        THINK = '<div class="think"><div class="dots"><span></span><span></span><span></span></div>{}</div>'
-
-        def paint(stage, gate=None, gate_ms=None, llm=None, llm_ms=None, css_play=False):
-            """stage: 'gate_running' | 'llm_running' | 'done'. gate/llm: live results or None (use stored)."""
-            pf, po, pr = (gate["p_fault"], gate["p_operational"], gate["p_real_event"]) if gate else (ev.p_fault, ev.p_operational, ev.p_real_event)
-            gate_lat = f"{gate_ms:.0f} ms" if gate_ms is not None else "~0.3 s"
-            llm_lat = f"{llm_ms/1000:.1f} s" if llm_ms is not None else "~3 s"
-            rationale = humanize((llm or {}).get("rationale") or why) if stage == "done" else ""
-            facts_live = [humanize(e.get("fact", "")) for e in ((llm or {}).get("evidence") or []) if isinstance(e, dict) and e.get("fact")][:3] if llm else facts
-            conf = (llm or {}).get("confidence", ev.confidence)
-            conf_txt = "" if conf is None else f" · {pct(conf)}% sure"
-            quick_sub = "Not clear-cut, so it took a closer look" if closer else "Clear-cut, decided instantly"
-            play = ("play" + ("" if closer else " quick")) if css_play else ""
-            pop = "" if css_play else "pop"
-            s2_body = (THINK.format("Running ai_decide") if stage == "gate_running" else "") + bars_html(pf, po, pr) + f'<div class="s verdictline">{quick_sub}</div>'
-            closer_html = ""
-            if closer:
-                body = (THINK.format("Running ai_query · reading the evidence") if stage in ("gate_running", "llm_running") else
-                        (THINK.format("Reading the evidence") if css_play else ""))
-                closer_html = (ARROW + f'<div class="step s3 {pop}"><div class="t">Closer look <span class="lat">{llm_lat}</span></div><span class="model">ai_query · LLM</span>'
-                               '<div class="answer"><div class="v">Reasoned over the full evidence</div>'
-                               f'<div class="s">Gauge history, physical limits, neighbouring gauges{", rainfall" if used_rain else ""}{conf_txt}</div></div>' + body + '</div>')
-            decision_html = ("" if stage != "done" else ARROW +
-                             f'<div class="step s4 {pop}" style="flex:0 0 auto;border-color:{vc}"><div class="t">Decision</div><div class="v" style="color:{vc}">{VERDICT_WORD.get(ev.verdict, ev.verdict)}</div><div class="s">{sev.capitalize() if sev else "&nbsp;"}</div></div>')
-            why_head = ("AI reasoning · generated live by the LLM (ai_query)" if llm else "AI reasoning · generated by the LLM (ai_query)") if ev.decided_by == "AGENT_SQL" else "Decision note · from the quick check (ai_decide)"
-            tail = "" if stage != "done" else (f'<div class="acts {pop}">{tiles_html()}</div>'
-                                               f'<div class="why {pop}"><div class="whyhead">{why_head}</div><div class="txt">{rationale}</div></div>'
-                                               f'<div class="chips {pop}">{"".join(f"<span class=\"chip\">{f}</span>" for f in facts_live)}</div>')
-            note = '<div class="livenote">Models re-run live on the stored input · timings include the round trip to the warehouse</div>' if (gate or llm) else ""
-            slot.markdown(f'<div class="{play}"><div class="flow">'
-                          f'<div class="step s1"><div class="t">Spotted <span class="lat">live</span></div><span class="model">rule-based detector</span><div class="v">{odd_cap}</div><div class="s">Continuous checks on every reading</div></div>'
-                          + ARROW +
-                          f'<div class="step s2 {pop}"><div class="t">Quick check <span class="lat">{gate_lat}</span></div><span class="model">ai_decide · Jev</span>{s2_body}</div>'
-                          + (closer_html if stage != "gate_running" else "") + decision_html + '</div>' + tail + note + '</div>', unsafe_allow_html=True)
-
-        cached = ss.live_results.get(ev.candidate_id)     # live results come from run_live (process flow); this card only shows them
-        if cached is not None:
-            paint("done", cached["gate"], cached["gate_ms"], cached["llm"], cached["llm_ms"])
-        else:
-            paint("done", css_play=anim)                    # replay mode: stored values with the CSS reveal
-
-
-
-# ----------------------------------------------------------------------------- process flow (new): one record's path, Detect → Act
+# ----------------------------------------------------------------------------- process flow: one record's path, Detect → Act
 FLOW_STAGES = ["Detect", "Quick check", "Route", "Investigate", "Verdict", "Act"]
 ROUTE_REASON = {
     "NO_GATE": "No quick-check result, so it takes a closer look.",
@@ -893,7 +620,7 @@ def run_live(ev, paint):
     pc = ss.pending_call
     if pc is not None and pc["candidate_id"] == ev.candidate_id:   # the countdown starts only once the decision is on screen
         pc["deadline"] = time.time() + ss.countdown_s
-    ss.hero_shown_at = 0                                # nothing left to reveal; reruns may proceed
+    ss.flow_shown_at = 0                                # nothing left to reveal; reruns may proceed
     return ss.live_results[ev.candidate_id]
 
 def call_controls(ev, pending, col):
@@ -924,8 +651,7 @@ def call_controls(ev, pending, col):
             st.rerun()
 
 # ----------------------------------------------------------------------------- state
-events, stations, cases = derive(load_events()), load_stations(), load_cases()
-golden, plan = load_results()
+events, stations = derive(load_events()), load_stations()
 T_MIN = datetime(2026, 9, 1, tzinfo=MDT)       # seek range is pinned, in MDT like every displayed time
 T_MAX = datetime(2026, 10, 2, tzinfo=MDT)
 
@@ -1063,7 +789,7 @@ if len(seen):
     if ss.pending_call and (seen.candidate_id == ss.pending_call["candidate_id"]).any():
         latest = seen[seen.candidate_id == ss.pending_call["candidate_id"]].iloc[0]   # the card must be the one the call belongs to
 
-# ----------------------------------------------------------------------------- dashboard (new, in development)
+# ----------------------------------------------------------------------------- dashboard
 def flow_spark(station_id, t_end, hours=24, max_pts=96):
     """Recent flow at a station for the map label: (values, label) or (None, None) without discharge data."""
     rd = load_readings(station_id, "DISCHARGE")
@@ -1134,7 +860,7 @@ if cur_id is not None:
 
 st.markdown(f'<div class="dash-head"><div class="dash-title">{system}<span class="chev">›</span>{SYSTEM_NAME.get(system, system)} River System</div>'
             f'<div class="dash-brand"><div class="logo">River Sentinel</div><div class="clock">{fmt(T)} MDT</div></div></div>', unsafe_allow_html=True)
-MAP_H = 380                                          # map height; the summary cards fill the same height beside it
+MAP_H = 350                                          # map height; the summary cards fill the same height beside it
 map_col, stats_col = st.columns([3.2, 1], gap="medium")   # the map fills its column; station panels overlay its right edge
 with map_col:
     in_sel = set(lanes.station_id)
@@ -1143,17 +869,17 @@ with map_col:
 with stats_col:
     stats_col.markdown(summary_cards(seen, MAP_H + 2), unsafe_allow_html=True)
 
-# ----------------------------------------------------------------------------- process flow (new): how the current record is being handled
+# ----------------------------------------------------------------------------- process flow: how the current record is being handled
 flow_ev, fresh = None, False                    # the record on show, and whether it just arrived (plays its reveal / runs live models)
 if scenario is not None:
     flow_ev, fresh = scenario, ss.scenario_fresh
 elif latest is not None:
     flow_ev = latest
-    fresh = settled and ss.get("last_hero") != latest.candidate_id
+    fresh = settled and ss.get("last_flow") != latest.candidate_id
     if settled:
-        ss.last_hero = latest.candidate_id
+        ss.last_flow = latest.candidate_id
     if fresh:
-        ss.hero_shown_at = time.time()          # the reveal runs ~5 s; reruns are held off until it has played
+        ss.flow_shown_at = time.time()          # the reveal runs ~5 s; reruns are held off until it has played
 
 h1, h2 = st.columns([5, 1], vertical_alignment="bottom")
 mode_txt = "scenario · models run live" if scenario is not None else ("models re-run live" if ss.live_mode else "stored results")
@@ -1175,7 +901,7 @@ else:
     cached = ss.live_results.get(flow_ev.candidate_id)
     if (ss.live_mode or getattr(flow_ev, "dynamic", False)) and fresh and cached is None:
         cached = run_live(flow_ev, paint_flow)  # the only place the models are re-run
-    queued = cached is None and scenario is None and not settled and ss.get("last_hero") != flow_ev.candidate_id
+    queued = cached is None and scenario is None and not settled and ss.get("last_flow") != flow_ev.candidate_id
     if cached is not None:
         paint_flow("done", cached["gate"], cached["gate_ms"], cached["llm"], cached["llm_ms"])
     elif queued:
@@ -1199,125 +925,11 @@ else:
     elif not settled:
         st.caption("Moving… the live check starts when the playhead rests.")
 
-st.markdown('<div class="legacy-sep">Legacy dashboard — being phased out</div>', unsafe_allow_html=True)
-
-# ----------------------------------------------------------------------------- header
-st.caption("RiverSentinel · river gauge watch, replayed over September 2026. The screen shows only what the system knew at the time shown.")
-st.markdown(f"## {fmt(T)}", unsafe_allow_html=True)
-m = st.columns(4)
-m[0].metric("Odd readings spotted", len(seen))
-m[1].metric("Settled instantly", f"{(seen.route == 'AUTO_RESOLVE').mean()*100:.0f}%" if len(seen) else "–",
-            help="Decided by a quick check, without AI reasoning")
-m[2].metric("Sent to a technician", int(has(seen, "TICKET").sum()), help="Bad-sensor tickets; readings flagged so they do not poison downstream models")
-m[3].metric("Calls to the on-call person", int(seen[has(seen, "PAGE")].event_key.nunique()), help="One call per gauge per event")
-
-# ----------------------------------------------------------------------------- live decision (the highlight)
-if flow_ev is not None:                         # same record as the process flow above; display only
-    pc = ss.pending_call
-    hero(flow_ev, fresh, pc if (pc and pc["candidate_id"] == flow_ev.candidate_id) else None, ss.calls.get(flow_ev.candidate_id))
-    if scenario is not None:
-        ss.scenario_fresh = False
-else:
-    # nothing seen yet: quiet sentry state
-    st.markdown(f'<div class="idle"><div class="dot"></div><div><b>Watching {len(lanes)} gauge{"s" if len(lanes) != 1 else ""}</b> in '
-                f'{SYSTEM_LABEL.get(system, system)}. Nothing unusual so far. Press <b>next ▸▸</b> in the Dev Panel to move to the first odd reading.</div></div>', unsafe_allow_html=True)
-    station_map(lanes, None, height=320)
-
-# ----------------------------------------------------------------------------- timeline
-lane_order = list(lanes.station_id)
-lane_label = {r.station_id: nice_name(r.name) for r in lanes.itertuples()}
-fig = go.Figure()
-cases_l = cases[cases.station_id.isin(lane_order)]
-for k in cases_l.itertuples():
-    y = lane_order.index(k.station_id)
-    fig.add_shape(type="rect", x0=mdt(k.win_start_utc), x1=mdt(k.win_end_utc), y0=y - 0.45, y1=y + 0.45, fillcolor=GRID, opacity=0.6, line_width=0, layer="below")
-    fig.add_annotation(x=mdt(k.win_start_utc), y=y + 0.42, text=k.case_id, showarrow=False, font=dict(size=10, color=INK2), xanchor="left", yanchor="bottom")
-if len(upcoming):
-    fig.add_trace(go.Scatter(x=mdt(upcoming.visible_at), y=[lane_order.index(s) for s in upcoming.station_id], mode="markers",
-                             marker=dict(size=6, color=VERDICT_COLOR["PENDING"]), name="Not yet happened",
-                             hovertemplate="not yet happened<extra></extra>"))
-for verdict, color in VERDICT_COLOR.items():
-    if verdict == "PENDING": continue
-    d = seen[seen.verdict == verdict]
-    if not len(d): continue
-    fig.add_trace(go.Scatter(
-        x=mdt(d.visible_at), y=[lane_order.index(s) for s in d.station_id], mode="markers", name=VERDICT_WORD[verdict],
-        marker=dict(size=[16 if a == "PAGE" else 11 for a in d.primary_action], color=color, line=dict(width=2, color=SURFACE),
-                    symbol=[ACTION_SYMBOL.get(a, "circle") for a in d.primary_action]),
-        customdata=list(zip([nice_name(n) for n in d.station_name], [RULE_WORD.get(r, r) for r in d.rule], [ACTION_WORD.get(a, a) for a in d.primary_action])),
-        hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br>" + VERDICT_WORD[verdict] + " → %{customdata[2]}<extra></extra>"))
-fig.add_vline(x=mdt(T), line_width=2, line_color=INK)
-fig.update_layout(height=max(240, 28 * len(lane_order) + 60), margin=dict(l=10, r=10, t=10, b=10),
-                  paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, font=dict(color=INK2, family="system-ui, -apple-system, Segoe UI, sans-serif"),
-                  legend=dict(orientation="h", y=-0.1, font=dict(color=INK2)),
-                  xaxis=dict(range=[mdt(T_MIN), mdt(T_MAX)], gridcolor=GRID, linecolor=AXIS, tickfont=dict(color=MUTED)),
-                  yaxis=dict(tickmode="array", tickvals=list(range(len(lane_order))), ticktext=[lane_label[s] for s in lane_order],
-                             autorange="reversed", gridcolor=GRID, tickfont=dict(size=11, color=INK2)))
-st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-st.caption("One row per river gauge. Each dot is a reading the system thought was odd. Colour: what it decided. "
-           "Shape: what it did — star = called someone · cross = flagged bad data · square = sent a technician · circle = just noted it. "
-           "Grey bands are the events we know really happened. Grey dots have not happened yet.")
-
-# ----------------------------------------------------------------------------- decisions + gauge
-left, right = st.columns([1.15, 1])
-with left:
-    st.subheader("Earlier decisions")
-    earlier = seen.sort_values("visible_at", ascending=False).iloc[1:13]
-    if not len(earlier):
-        st.caption("Only one decision so far.")
-    for ev in earlier.itertuples():
-        vc = VERDICT_COLOR.get(ev.verdict, MUTED)
-        acts = " · ".join(ACTION_TITLE.get(a, a) for a in ev.actions) or "Logged"
-        st.markdown(f'<div class="card" style="border-left:5px solid {vc};padding:10px 14px">'
-                    f'<div style="color:#52514e;font-size:.85rem">{fmt(ev.visible_at)}</div>'
-                    f'<div><b>{nice_name(ev.station_name)}</b> — {VERDICT_WORD.get(ev.verdict, ev.verdict)}'
-                    f'<span style="color:#52514e"> · {RULE_WORD.get(ev.rule, ev.rule)}</span></div>'
-                    f'<div style="color:#0b0b0b;margin-top:2px">{acts}</div></div>', unsafe_allow_html=True)
-
-with right:
-    focus = known.iloc[-1].station_id if len(known) else lane_order[0]
-    st.subheader(lane_label.get(focus, focus))
-    sig = st.radio("Measure", ["DISCHARGE", "LEVEL"], horizontal=True, label_visibility="collapsed",
-                   format_func=lambda s: "Flow (m³/s)" if s == "DISCHARGE" else "Water level (m)")
-    rd = load_readings(focus, sig)
-    win_start = T - timedelta(hours=36)
-    d = rd[(rd.ts_utc >= win_start) & (rd.ts_utc <= T)]
-    f2 = go.Figure()
-    f2.add_trace(go.Scatter(x=mdt(d.ts_utc), y=d.value, mode="lines", line=dict(width=2, color=VERDICT_COLOR["NATURAL_EVENT"]), name="Reading",
-                            hovertemplate="%{x|%b %d %H:%M} · %{y:.3g}<extra></extra>"))
-    qd = d[d.is_quarantined == True]
-    if len(qd):
-        f2.add_trace(go.Scatter(x=mdt(qd.ts_utc), y=qd.value, mode="markers", name="Flagged as bad data",
-                                marker=dict(symbol="x", size=10, color=VERDICT_COLOR["SENSOR_FAULT"], line=dict(width=1, color=SURFACE))))
-    for ev in known[(known.station_id == focus) & (known.ts_end_utc >= win_start)].itertuples():
-        f2.add_vrect(x0=mdt(ev.ts_start_utc), x1=mdt(max(ev.ts_end_utc, ev.ts_start_utc + timedelta(minutes=10))),
-                     fillcolor=VERDICT_COLOR.get(ev.verdict, MUTED), opacity=0.15, line_width=0)
-    f2.add_vline(x=mdt(T), line_width=2, line_color=INK)
-    f2.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, showlegend=len(qd) > 0,
-                     font=dict(color=INK2, family="system-ui, -apple-system, Segoe UI, sans-serif"),
-                     xaxis=dict(type="date", range=[mdt(win_start), mdt(T)], gridcolor=GRID, linecolor=AXIS, tickfont=dict(color=MUTED)),
-                     yaxis=dict(title="m³/s" if sig == "DISCHARGE" else "m", gridcolor=GRID, tickfont=dict(color=MUTED), rangemode="tozero"),
-                     hovermode="x unified")
-    st.plotly_chart(f2, width="stretch", config={"displayModeBar": False})
-    st.caption("Last 36 hours up to the time shown. Shaded = the odd readings, coloured by decision. Crosses = readings flagged as bad data.")
-
-# ----------------------------------------------------------------------------- footer: two numbers and one sentence
-done = golden[golden.case_id.isin(cases_l[cases_l.win_end_utc <= T].case_id)] if len(golden) else golden
-if len(done):
-    agent_ok = int(done.outcome_ok.fillna(False).astype(bool).sum())
-    st.markdown(f"**Known events so far: {len(done)}** — real floods, broken sensors and dam releases that we verified by hand. "
-                f"The system handled **{agent_ok}** of them correctly.")
-if len(plan):
-    with st.expander("How the system improved itself"):
-        for r in plan.itertuples():
-            st.markdown(f"After the first pass it reviewed its own misses — {r.trigger.replace('R1: ', '')} — and changed one setting "
-                        f"(`{r.change}`). The second pass applied that change and nothing else.")
-
 # ----------------------------------------------------------------------------- clock
 REVEAL_S = 5.2
 def _hold_for_reveal():
     """A rerun replaces the card's HTML and would cut the CSS reveal short; wait until it has played."""
-    left = REVEAL_S - (time.time() - ss.get("hero_shown_at", 0))
+    left = REVEAL_S - (time.time() - ss.get("flow_shown_at", 0))
     if left > 0: time.sleep(left)
 
 if not settled and len(seen):
