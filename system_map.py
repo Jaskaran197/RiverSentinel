@@ -21,10 +21,11 @@ import streamlit as st
 MAPLIBRE_JS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"
 MAPLIBRE_CSS = "https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css"
 
-# monochrome placeholder palette; the relationships (water darkest, roads lightest, current station loudest) should survive restyling
-C = {"bg": "#efefed", "land": "#e6e6e3", "water": "#a9a9a5", "river": "#5f5f5b", "stream": "#8d8d89", "road": "#fbfbfa",
-     "road_case": "#c4c4c0", "border": "#9a9a96", "label": "#3b3b39", "label_soft": "#6b6b67", "halo": "#f4f4f2",
-     "station": "#3a3a3a", "station_off": "#b3b3af", "current": "#d7263d", "neighbour": "#1f7fd1"}
+# "Watermark" palette: a paper-toned duotone with the water washed cobalt. Relationships to keep when restyling: water darker than land,
+# rivers the strongest lines, roads lightest; stations ink, out-of-selection stations faded, current = signal (vermilion), neighbours = cobalt.
+C = {"bg": "#EAE6DC", "land": "#E1DCCF", "water": "#C3CBEA", "river": "#3D52B5", "stream": "#8F9AC4", "road": "#F8F6F0",
+     "road_case": "#CCC5B5", "border": "#A29B8B", "label": "#1F2024", "label_soft": "#6A665C", "halo": "#F2EFE8",
+     "station": "#0E0F12", "station_off": "#B5AE9F", "current": "#FF4A1C", "neighbour": "#2440F0"}
 
 STYLE = {
     "version": 8,
@@ -43,8 +44,8 @@ STYLE = {
          "filter": ["in", ["get", "class"], ["literal", ["wood", "forest", "grass", "ice"]]],
          "paint": {"fill-color": C["land"], "fill-opacity": 0.6}},
         {"id": "hillshade", "type": "hillshade", "source": "dem",
-         "paint": {"hillshade-shadow-color": "#555552", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#7d7d79",
-                   "hillshade-exaggeration": 0.4, "hillshade-illumination-direction": 315}},
+         "paint": {"hillshade-shadow-color": "#6F6757", "hillshade-highlight-color": "#FFFDF6", "hillshade-accent-color": "#8C8472",
+                   "hillshade-exaggeration": 0.38, "hillshade-illumination-direction": 315}},
         {"id": "water", "type": "fill", "source": "omt", "source-layer": "water", "paint": {"fill-color": C["water"]}},
         {"id": "waterway-stream", "type": "line", "source": "omt", "source-layer": "waterway",
          "filter": ["!=", ["get", "class"], "river"], "minzoom": 8,
@@ -83,30 +84,30 @@ GUTTER = 240          # px on the map's right kept clear of stations (fit paddin
 _CSS = """
 :host{display:block}
 .wrap{position:relative}
-.rsmap{position:relative;border:1px solid #d9d9d5;border-radius:6px;overflow:hidden;background:#efefed}
+.rsmap{position:relative;border:1px solid #0E0F12;border-radius:3px;overflow:hidden;background:#EAE6DC}
 .canvas{position:absolute;inset:0}
-.msg{position:absolute;inset:0;display:grid;place-items:center;color:#8b8b86;font:13px system-ui,sans-serif}
+.msg{position:absolute;inset:0;display:grid;place-items:center;color:#8A877E;font:500 11px/1 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
 .cur{position:relative;width:14px;height:14px}
-.cur .dot{position:absolute;inset:0;border-radius:50%;background:var(--cur);box-shadow:0 0 0 2px #fff}
+.cur .dot{position:absolute;inset:0;border-radius:50%;background:var(--cur);box-shadow:0 0 0 2px #FBFAF6,0 0 0 3px rgba(14,15,18,.25)}
 .cur .ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cur);animation:pulse 1.8s ease-out infinite}
 .cur .ring.r2{animation-delay:.9s}
 @keyframes pulse{from{transform:scale(1);opacity:.9} to{transform:scale(3.6);opacity:0}}
 /* connectors: station -> map edge -> panel notch (straight when the panel sits level with its station, elbowed when displaced) */
 svg.links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:3}
-svg.links path{fill:none;stroke-width:1;stroke-dasharray:3 3;opacity:.75;transition:d .35s ease}
+svg.links path{fill:none;stroke-width:1.2;stroke-dasharray:2 3;opacity:.9;transition:d .35s ease}
 /* panels: bolted onto the map's right edge, stacked without overlap; notch at the station's height */
-.panel{position:absolute;top:0;background:rgba(255,255,255,.96);border:1px solid #d0d0cc;border-left:3px solid var(--c);border-radius:0 4px 4px 0;
-       padding:5px 10px 6px;white-space:nowrap;font:12px/1.3 system-ui,sans-serif;color:#1d1d1b;box-shadow:2px 2px 8px rgba(0,0,0,.08);
+.panel{position:absolute;top:0;background:rgba(251,250,246,.97);border:1px solid #CBC5B7;border-left:3px solid var(--c);border-radius:0 2px 2px 0;
+       padding:5px 10px 6px;white-space:nowrap;font:12px/1.3 'Inter Tight',system-ui,sans-serif;color:#0E0F12;box-shadow:0 6px 16px rgba(14,15,18,.12);
        transition:top .35s ease;max-width:calc(var(--gutter) - 16px);z-index:4}
 .panel::before{content:"";position:absolute;left:-9px;top:var(--notch,50%);transform:translateY(-50%);border:6px solid transparent;border-right-color:var(--c);transition:top .35s ease}
 .panel.nb{padding:3px 9px 4px;font-size:11.5px;line-height:1.25}
-.panel.nb .val{font-size:10.5px}
+.panel.nb .val{font-size:9.5px}
 .panel .hd{display:flex;align-items:center;gap:6px}
-.panel .id{font-weight:700;letter-spacing:.03em}
-.panel .badge{background:var(--c);color:#fff;font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:999px}
-.panel .nm{color:#4a4a47;overflow:hidden;text-overflow:ellipsis}
+.panel .id{font:600 11px/1.2 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.04em}
+.panel .badge{background:var(--c);color:#FBFAF6;font:600 8.5px/1.5 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;padding:0 5px;border-radius:2px}
+.panel .nm{color:#55565C;overflow:hidden;text-overflow:ellipsis}
 .panel svg{display:block;margin-top:3px}
-.panel .val{font-size:11px;color:#4a4a47;margin-top:1px}
+.panel .val{font:10px/1.3 'JetBrains Mono',ui-monospace,monospace;color:#55565C;margin-top:1px}
 .maplibregl-ctrl-attrib{font-size:10px}
 """
 
@@ -254,7 +255,7 @@ export default function (component) {
         map.addLayer({ id: "stations", type: "circle", source: "stations", paint: {
           "circle-radius": ["match", ["get", "role"], "nb", 6, "on", 5, 4],
           "circle-color": ["match", ["get", "role"], "nb", col.neighbour, "on", col.station, col.station_off],
-          "circle-stroke-color": "#ffffff", "circle-stroke-width": ["match", ["get", "role"], "nb", 2, 1.5] } });
+          "circle-stroke-color": "#FBFAF6", "circle-stroke-width": ["match", ["get", "role"], "nb", 2, 1.5] } });
         mapEl.querySelector(".msg").remove();
         mapEl.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");   // start collapsed (the "i" opens it)
         s.ready = true; apply(s);
