@@ -185,6 +185,9 @@ section[data-testid="stSidebar"] .stButton button:hover{background:rgba(126,224,
 /* expander */
 section[data-testid="stSidebar"] [data-testid="stExpander"] details{border:1px dashed var(--dv-line);border-radius:2px;background:transparent}
 section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover, section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover p{color:var(--dv-acc)}
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary{background:transparent !important}   /* Streamlit paints it near-white when open */
+section[data-testid="stSidebar"] [data-testid="stExpander"] details[open] > summary{border-bottom:1px dashed var(--dv-line)}
+section[data-testid="stSidebar"] [data-testid="stExpander"] details[open] > summary p{color:var(--dv-acc)}
 /* collapse chevron */
 section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button{color:var(--dv-mute)}
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]{height:40px;margin-bottom:0}   /* half the default space above the title */
