@@ -18,10 +18,12 @@ solution; source in [`docs/story.html`](docs/story.html)) ·
 
 ## Demo
 
-<!-- DEMO VIDEO: on github.com, edit this README and drag the .mp4 onto this spot. GitHub uploads it and inserts a
-     user-attachments link that plays inline. Then delete this comment. -->
+[![Demo video: replaying September in Cape Breton, the agent works through two anomalies and starts a (simulated) call to the on-call officer](docs/images/demo-poster.jpg)](docs/media/river-sentinel-demo.mp4)
 
-*A walkthrough of the app is coming soon.*
+A 55-second walkthrough ([`docs/media/river-sentinel-demo.mp4`](docs/media/river-sentinel-demo.mp4)): replaying
+September in Cape Breton with the models re-running live. A sudden step at Macaskills Brook goes to the closer look, which
+calls it a minor real rise and puts the station on watch. Then River Denys stops reporting; the agent can't rule out a
+real event, so it starts the countdown to call the on-call officer.
 
 ## The problem
 
@@ -118,7 +120,7 @@ The app reads its output from Unity Catalog: `silver.readings`, `silver.station_
 | [`scenarios.py`](scenarios.py) | Preset events (sensor dropout, dam release, flood starting, …) to run through the agent on demand |
 | [`test_databricks.py`](test_databricks.py), [`test_twilio.py`](test_twilio.py) | Manual go/no-go checks for the warehouse and phone credentials |
 | [`tests/`](tests) | Offline unit tests (network access is blocked) |
-| [`docs/`](docs) | The presentation and images used in this README |
+| [`docs/`](docs) | The presentation, the demo video, and the images used in this README |
 
 ### Running it
 
