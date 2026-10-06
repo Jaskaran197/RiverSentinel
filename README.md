@@ -18,12 +18,11 @@ solution; source in [`docs/story.html`](docs/story.html)) ·
 
 ## Demo
 
-[![Demo video: replaying September in Cape Breton, the agent works through two anomalies and starts a (simulated) call to the on-call officer](docs/images/demo-poster.jpg)](docs/media/river-sentinel-demo.mp4)
+![Demo: replaying September in Cape Breton, the agent works through two anomalies and starts a (simulated) call to the on-call officer](docs/media/river-sentinel-demo.gif)
 
-A 55-second walkthrough ([`docs/media/river-sentinel-demo.mp4`](docs/media/river-sentinel-demo.mp4)): replaying
-September in Cape Breton with the models re-running live. A sudden step at Macaskills Brook goes to the closer look, which
-calls it a minor real rise and puts the station on watch. Then River Denys stops reporting; the agent can't rule out a
-real event, so it starts the countdown to call the on-call officer.
+A 55-second walkthrough, replaying September in Cape Breton with the models re-running live. A sudden step at
+Macaskills Brook goes to the closer look, which calls it a minor real rise and puts the station on watch. Then River
+Denys stops reporting; the agent can't rule out a real event, so it starts the countdown to call the on-call officer.
 
 ## The problem
 
