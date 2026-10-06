@@ -1,9 +1,4 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
-  <img src="docs/images/logo.svg" alt="RiverSentinel logo" width="88">
-</picture>
-
-# RiverSentinel
+# <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg"><img src="docs/images/logo.svg" alt="RiverSentinel logo" height="44" align="absmiddle"></picture> RiverSentinel
 
 **Sensor fault or real flood? An AI agent that tells them apart, using Environment Canada's live river data.**
 
