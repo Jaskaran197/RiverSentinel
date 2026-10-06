@@ -2,9 +2,9 @@
 """
 Twilio go/no-go test (stdlib only, no pip install needed).
 
-  python scripts/test_twilio.py                      # 1) validate credentials + number, no call
-  python scripts/test_twilio.py --call +14035551234  # 2) ring that phone, poll until a final status
-  python scripts/test_twilio.py --call +14035551234 --no-answer-test
+  python test_twilio.py                      # 1) validate credentials + number, no call
+  python test_twilio.py --call +14035551234  # 2) ring that phone, poll until a final status
+  python test_twilio.py --call +14035551234 --no-answer-test
                                                      # 3) same, but DON'T pick up: verifies we see 'no-answer'
 
 Reads TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER from a .env in this folder,
@@ -129,4 +129,4 @@ if __name__ == "__main__":
     if a.call:
         place_call(a.call, a.no_answer_test)
     else:
-        print("\nNext: python scripts/test_twilio.py --call +1403XXXXXXX   (then again with --no-answer-test)")
+        print("\nNext: python test_twilio.py --call +1403XXXXXXX   (then again with --no-answer-test)")

@@ -15,3 +15,6 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# playwright screenshots/snapshots
+.playwright-mcp/
