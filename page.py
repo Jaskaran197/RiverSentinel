@@ -3,10 +3,10 @@
 RiverSentinel voice page: ElevenLabs agent calls the duty officer via Twilio, escalates on no-answer.
 Stdlib only. Reads .env from this folder, its parents, or the environment.
 
-  python scripts/page.py --setup                 # list agents + imported phone numbers, suggest .env lines
-  python scripts/page.py --test                  # call CONTACT_1 with the demo flood alert (no escalation)
-  python scripts/page.py --test --escalate       # call CONTACT_1; if unanswered in RING_TIMEOUT_S, call CONTACT_2
-  python scripts/page.py --station "Bow River at Calgary" --severity "Danger to life" \
+  python page.py --setup                 # list agents + imported phone numbers, suggest .env lines
+  python page.py --test                  # call CONTACT_1 with the demo flood alert (no escalation)
+  python page.py --test --escalate       # call CONTACT_1; if unanswered in RING_TIMEOUT_S, call CONTACT_2
+  python page.py --station "Bow River at Calgary" --severity "Danger to life" \
         --summary "Discharge rose from 70 to 1900 cubic metres per second in six hours." \
         --evidence "Rate of rise 2600 percent; upstream Cochrane rising; 240 mm rain in 48 h; flood warning active." \
         --escalate

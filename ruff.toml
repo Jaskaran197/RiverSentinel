@@ -9,7 +9,7 @@ ignore = [
   "E701",  # multiple statements on one line (colon)
   "E702",  # multiple statements on one line (semicolon)
   "E731",  # lambda assignment
-  "E402",  # section-local imports in timeline.py are intentional
+  "E402",  # section-local imports in app.py are intentional
   "E712",  # `== True` is required for pandas Series masks
   "B905",  # zip(strict=) noise
 ]

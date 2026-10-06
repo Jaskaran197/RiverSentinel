@@ -1,4 +1,4 @@
-"""Headless render of timeline.py via Streamlit AppTest: real (read-only) Databricks data, real calls and live AI forced off.
+"""Headless render of app.py via Streamlit AppTest: real (read-only) Databricks data, real calls and live AI forced off.
 AppTest can't click inside the custom player component, so it moves the playhead through session_state instead.
 Usage: python .claude/skills/smoke/app_check.py [N]   # render at N evenly spaced points in the month (default 3)"""
 import re, sys
@@ -10,7 +10,7 @@ from streamlit.testing.v1 import AppTest
 MDT = timezone(timedelta(hours=-6))
 T0, T1 = datetime(2026, 9, 1, tzinfo=MDT), datetime(2026, 10, 2, tzinfo=MDT)
 steps = int(sys.argv[1]) if len(sys.argv) > 1 else 3
-at = AppTest.from_file(str(Path(__file__).resolve().parents[3] / "timeline.py"), default_timeout=150)
+at = AppTest.from_file(str(Path(__file__).resolve().parents[3] / "app.py"), default_timeout=150)
 at.session_state["real_calls"] = False      # never dial
 at.session_state["live_mode"] = False       # stored results, no ai_decide/ai_query
 at.run()

@@ -1,6 +1,6 @@
 """
 RiverSentinel decision rules and helpers, kept free of Streamlit so they can be tested (tests/) without a warehouse.
-timeline.py imports everything here; the rules mirror the SQL pipeline (gold_build.sql), so keep the two in step.
+app.py imports everything here; the rules mirror the SQL pipeline (gold_build.sql), so keep the two in step.
 Import after .env is loaded: AUTO_RESOLVE_THRESHOLD reads the environment at import time.
 """
 from __future__ import annotations

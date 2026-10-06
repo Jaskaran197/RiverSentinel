@@ -2,8 +2,8 @@
 """
 Databricks go/no-go for the local demo. Run after filling .env:
 
-  python scripts/test_databricks.py            # connection, tables, one live ai_decide, one live ai_query (with timings)
-  python scripts/test_databricks.py --no-ai    # skip the model calls
+  python test_databricks.py            # connection, tables, one live ai_decide, one live ai_query (with timings)
+  python test_databricks.py --no-ai    # skip the model calls
 
 Reads DATABRICKS_HOST, DATABRICKS_WAREHOUSE_HTTP_PATH, DATABRICKS_TOKEN (and optional CATALOG, LLM_MODEL) from .env in this
 folder, the parent folder, or the environment.

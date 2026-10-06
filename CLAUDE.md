@@ -2,11 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-RiverSentinel local demo: a Streamlit app (`timeline.py`) that replays river-gauge anomaly events from Databricks, re-runs the AI verdict live, and pages a duty officer by phone (`page.py`, ElevenLabs + Twilio). Decision rules and helpers live in `logic.py` (no Streamlit) so they can be unit-tested; UI code stays in `timeline.py`.
+RiverSentinel local demo: a Streamlit app (`app.py`) that replays river-gauge anomaly events from Databricks, re-runs the AI verdict live, and pages a duty officer by phone (`page.py`, ElevenLabs + Twilio). Decision rules and helpers live in `logic.py` (no Streamlit) so they can be unit-tested; UI code stays in `app.py`.
 
 ## Commands
 
-- Run app: `streamlit run timeline.py` (port 8501). The user often has their own instance on 8501 — for browser checks run a separate one with `--server.headless true --server.port 8599`.
+- Run app: `streamlit run app.py` (port 8501). The user often has their own instance on 8501 — for browser checks run a separate one with `--server.headless true --server.port 8599`.
 - Databricks check: `python test_databricks.py --no-ai` (drop `--no-ai` to also exercise `ai_decide`/`ai_query`)
 - Twilio credential check (no call): `python test_twilio.py`
 - Unit tests (offline, no network): `pytest -q`; single test: `pytest tests/test_logic.py -k finalize`. `tests/conftest.py` blocks all network access.
@@ -25,18 +25,18 @@ The Dev Panel's "Place Call" toggle (`session_state["real_calls"]`) defaults off
 
 ## Layout & gotchas
 
-- The repo is **flat**. Docstrings saying `app/timeline.py`, `scripts/*.py`, or `SETUP_LOCAL.md` are stale — fix them to the flat paths when touching those files.
+- The repo is **flat**. Docstrings saying `app/timeline.py`, `timeline.py` (now `app.py`), `scripts/*.py`, or `SETUP_LOCAL.md` are stale — fix them to the flat paths when touching those files.
 - No local or mock data. Everything reads Unity Catalog tables `{CATALOG}.silver.*` and `{CATALOG}.gold.*` (CATALOG defaults to `river`). They're built by a pipeline in a separate repo — treat schemas as fixed; don't invent columns.
-- The LLM is Databricks-only, called via SQL `ai_decide(...)` and `ai_query(model, prompt, responseFormat=>...)` — no Anthropic/OpenAI SDK. The prompt and JSON schema live as constants in `timeline.py`.
-- `logic.py` mirrors the SQL pipeline's routing/verdict/severity/action rules (`decide_route`, `finalize`) — changing them diverges from stored results; flag it rather than doing it silently. `timeline.py` imports `logic` *after* `load_env()` because `AUTO_RESOLVE_THRESHOLD` is read at import.
+- The LLM is Databricks-only, called via SQL `ai_decide(...)` and `ai_query(model, prompt, responseFormat=>...)` — no Anthropic/OpenAI SDK. The prompt and JSON schema live as constants in `app.py`.
+- `logic.py` mirrors the SQL pipeline's routing/verdict/severity/action rules (`decide_route`, `finalize`) — changing them diverges from stored results; flag it rather than doing it silently. `app.py` imports `logic` *after* `load_env()` because `AUTO_RESOLVE_THRESHOLD` is read at import.
 - "Live mode" re-runs the AI on stored inputs and silently falls back to stored results on failure (shown as a caption), so a working UI doesn't prove live calls work.
 - Queries are cached `st.cache_data(ttl=900)`; the first query after idle pays the warehouse wake-up time.
 - Playback uses `time.sleep` + `st.rerun()` loops (`SETTLE_S`, `REVEAL_S`) — keep that pacing in mind before adding blocking work.
 - Everything displayed is in a hardcoded `MDT` (UTC-6); data and `session_state.t` stay UTC-aware. (If Plotly charts come back: Plotly has no time zones and can't parse offsets in shapes — pass naive MDT wall times.)
-- `page.py` is stdlib-only (keep it that way); `timeline.py` imports it as `pager`, looking in `.` then `../scripts`.
+- `page.py` is stdlib-only (keep it that way); `app.py` imports it as `pager`, looking in `.` then `../scripts`.
 - `load_env()` is duplicated in all four files: it reads `.env` from the script dir, its parent, grandparent, or cwd, and never overrides existing env vars.
 
-## UI conventions (timeline.py)
+## UI conventions (app.py)
 
 - Most of the UI is hand-written HTML via `st.markdown(..., unsafe_allow_html=True)`, styled by the single `<style>` block near the top. Streamlit buttons can't live inside that HTML.
 - Visual language "Inverted Panel" (main dashboard only): the Dev Panel's look with colours flipped — system monospace, square 2px corners, 1px rules, `//` labels with dashed rules, `[ bracketed ]` buttons. CSS variables on `:root` (`--bg --panel --fg --mute --faint --line --line2 --acc --alert --blue --amber --mono`) mirrored by Python constants (`FG`, `ACCENT`, `ALERT`, `BLUE`, `AMBER`, `VERDICT_COLOR`) and `system_map.C` (the original grayscale basemap). Highlighter yellow `--hl` (always a fill behind ink, never yellow text) = interactive / in progress; crimson = selected station and calls; green is reserved for the Dev Panel. Stop cards have a fixed height (`--cardh`) and the Act card's call tile a fixed height (`--tile-h`) so its buttons can be lifted by `--act-lift` to sit right under it — keep the three in sync. Earlier looks in git: "Watermark" df0a5c3, "Nocturne" 100a24f. Use the tokens, not new hex values; don't let main-dashboard CSS leak into the sidebar. Keep the dashboard within a 900px-tall window in replay.

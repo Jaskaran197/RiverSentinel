@@ -5,7 +5,7 @@ Pick a moment in September. The screen shows only what the system knew then: the
 counts, and how the current record was handled — detected, checked, routed, investigated, decided, acted on — including a short
 countdown during which a human can cancel before a phone call is placed. The Dev Panel (sidebar) drives playback and scenarios.
 
-Run:   streamlit run timeline.py
+Run:   streamlit run app.py
 Voice: page.py (ElevenLabs + Twilio); without it, or without its settings, calls are simulated.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ import sys, threading
 import pandas as pd
 import streamlit as st
 
-# the phone module (scripts/page.py). Optional: without it, or without ElevenLabs/Twilio settings, calls are simulated.
+# the phone module (page.py). Optional: without it, or without ElevenLabs/Twilio settings, calls are simulated.
 _here = Path(__file__).resolve().parent
 for _cand in (_here, _here.parent / "scripts"):
     if (_cand / "page.py").exists():
