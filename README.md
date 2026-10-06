@@ -81,6 +81,13 @@ One agent, on duty 24 hours a day, that reasons before it acts.
 
 ![Slide: the escalation timeline and a transcript of the agent briefing the duty officer](docs/images/slides/07-the-call.jpg)
 
+The voice is the **RiverSentinel Duty Pager**, an agent built on [ElevenLabs Agents](https://elevenlabs.io). A short system
+prompt keeps it to the evidence it was given, and each call opens with the alert's severity, station and a one-sentence
+summary. For every page, `page.py` asks ElevenLabs to place the call over its Twilio integration and passes in those
+values along with the evidence list.
+
+![The RiverSentinel Duty Pager agent in ElevenLabs: its system prompt, first message with severity, station and summary variables, voice and language settings](docs/images/elevenlabs-duty-pager.png)
+
 ### Nothing about this is about rivers
 
 Every site-specific fact lives in one configuration row (`station_context`). The stages, the two AI functions, the
